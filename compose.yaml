@@ -19,7 +19,7 @@ services:
   db:
     image: library/postgres:16
     ports:
-      - 5432:5432
+      - 5431:5431
     restart: unless-stopped
     env_file:
       - .env.dev
