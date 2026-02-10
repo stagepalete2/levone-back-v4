@@ -23,7 +23,8 @@ class BranchConfigInline(admin.StackedInline):
 
 
 class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
-    branch_field_name = None  # Branch сам по себе — фильтруем по pk
+    company_field_name = 'company'    # <--- ДОБАВЛЕНО: фильтрация по компании
+    branch_field_name = None          # Branch сам по себе — фильтруем по pk
 
     list_display = ('name', 'company', 'iiko_organization_id', 'created_at')
     list_filter = ('company',)
@@ -31,7 +32,9 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     inlines = [BranchConfigInline]
 
     def get_queryset(self, request):
-        qs = super(admin.ModelAdmin, self).get_queryset(request)
+        # Вызываем миксин (который теперь фильтрует по company),
+        # а потом дополнительно фильтруем по branch pk если нужно
+        qs = super().get_queryset(request)
         user = request.user
         if user.is_superuser:
             return qs
@@ -40,7 +43,6 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             if user_branches.exists():
                 return qs.filter(pk__in=user_branches)
         return qs
-
 
 # ─── BranchConfig ──────────────────────────────────────────────
 class BranchConfigAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):

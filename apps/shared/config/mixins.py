@@ -31,9 +31,40 @@ class BranchRestrictedAdminMixin:
             return None  # Нет привязки = владелец компании, видит всё
         return user_branches
 
+    def _get_user_company(self, user, request=None):
+        """
+        Возвращает компанию пользователя или None если полный доступ (суперюзер без компании).
+        
+        Приоритет:
+        1. user.company (если есть)
+        2. request.tenant (текущий тенант из django-tenants)
+        """
+        if user.is_superuser and not getattr(user, 'company_id', None):
+            # Глобальный суперюзер без привязки к компании
+            # Но если мы внутри тенанта — ограничиваем по тенанту
+            if request and hasattr(request, 'tenant'):
+                tenant = request.tenant
+                if tenant.schema_name != 'public':
+                    return tenant
+            return None
+        if hasattr(user, 'company') and user.company:
+            return user.company
+        # Fallback на текущий тенант
+        if request and hasattr(request, 'tenant'):
+            tenant = request.tenant
+            if tenant.schema_name != 'public':
+                return tenant
+        return None
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         user = request.user
+
+        # Фильтрация по Company (если задано company_field_name)
+        if self.company_field_name:
+            company = self._get_user_company(user, request)
+            if company is not None:
+                qs = qs.filter(**{self.company_field_name: company})
 
         user_branches = self._get_user_branches(user)
         if user_branches is None:
@@ -53,11 +84,17 @@ class BranchRestrictedAdminMixin:
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         user = request.user
+        company = self._get_user_company(user, request)
         user_branches = self._get_user_branches(user)
+
+        # Ограничиваем выбор Company в dropdown
+        if self.company_field_name and db_field.name == self.company_field_name and company is not None:
+            from apps.shared.clients.models import Company
+            kwargs["queryset"] = Company.objects.filter(pk=company.pk)
 
         if user_branches is not None:
             # Ограничиваем выбор Branch
-            if db_field.name == self.branch_field_name:
+            if self.branch_field_name and db_field.name == self.branch_field_name:
                 kwargs["queryset"] = user_branches
 
             # Ограничиваем выбор ClientBranch
