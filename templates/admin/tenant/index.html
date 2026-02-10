@@ -1,1 +1,77 @@
 {% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+
+{% block content %}
+    <div class="p-4" style="background-color: var(--body-bg); color: var(--body-fg); min-height: 100vh;">
+        <div class="mb-4">
+            {# Use 'border' with opacity or Django's border variable #}
+            <div class="card shadow-sm border-0" style="background-color: var(--darkened-bg); border: 1px solid var(--border-color) !important;">
+                <div class="card-header py-3" style="background-color: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color);">
+                    <h5 class="card-title mb-0 fw-bold" style="color: var(--body-fg);">
+                        Коды дня на сегодня ({{ today|date:"d.m.Y" }})
+                    </h5>
+                </div>
+                
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        {# Remove table-dark and use inherit to match Django Admin styling #}
+                        <table class="table mb-0" style="color: var(--body-fg);">
+                            <thead>
+                                <tr style="background-color: var(--darkened-bg); border-bottom: 1px solid var(--border-color);">
+                                    <th class="ps-4 border-0">Ресторан</th>
+                                    <th class="border-0">Код дня игры</th>
+                                    <th class="border-0">Код дня задании</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in branch_codes %}
+                                <tr class="align-middle" style="border-bottom: 1px solid var(--border-color);">
+                                    <td class="ps-4 fw-medium">{{ item.branch }}</td>
+                                    <td>
+                                        <span class="badge font-monospace fs-6" style="background-color: var(--body-bg); border: 1px solid var(--border-color); color: var(--body-fg);">
+                                            {{ item.game_code|default:"Не сгенерирован" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge font-monospace fs-6" style="border: 1px solid var(--border-color); color: var(--body-fg);">
+                                            {{ item.quest_code|default:"Не сгенерирован" }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-main" class="mb-4">
+            <div class="card shadow-sm border-0" style="background-color: var(--darkened-bg); border: 1px solid var(--border-color) !important;">
+                <div class="card-header py-3" style="background-color: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color);">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <a href="/analytics/statistics/" class="text-decoration-none" style="color: #28a745;">
+                            <i class="bi bi-graph-up-arrow me-2"></i>Аналитика
+                        </a>
+                    </h5>
+                </div>
+                
+                <div class="list-group list-group-flush">
+                    <a href="/analytics/statistics/" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3" 
+                    style="background-color: transparent; color: var(--body-fg); border-bottom: 1px solid var(--border-color);">
+                        <span class="fw-medium">Общая Аналитика</span>
+                        <span class="badge rounded-pill bg-success opacity-75 px-3 py-2">Перейти</span>
+                    </a>
+
+                    <a href="/analytics/rf/" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3" 
+                    style="background-color: transparent; color: var(--body-fg); border-bottom: 0;">
+                        <span class="fw-medium">RF Аналитика</span>
+                        <span class="badge rounded-pill bg-success opacity-75 px-3 py-2">Перейти</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div> 
+{% endblock %}
+

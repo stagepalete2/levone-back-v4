@@ -1,0 +1,101 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 | Lost in Space</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0a;
+            --text-main: #ffffff;
+            --text-dim: #888888;
+            --accent: #555555;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            padding: 2rem;
+        }
+
+		img {
+			width: 300px;
+		}
+
+        h1 {
+            font-size: clamp(3rem, 10vw, 5rem);
+            font-weight: 200;
+            margin: 0;
+            letter-spacing: -0.05em;
+            background: linear-gradient(to bottom, #fff 30%, #333 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            opacity: 0.9;
+        }
+
+        p {
+            font-size: 1.1rem;
+            color: var(--text-dim);
+            margin-top: -1px;
+            margin-bottom: 1rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+        }
+
+        .home-link {
+            display: inline-block;
+            text-decoration: none;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            padding: 0.75rem 1.5rem;
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .home-link:hover {
+            background: var(--text-main);
+            color: var(--bg-color);
+            border-color: var(--text-main);
+        }
+
+        /* Subtle ambient movement */
+        .glow {
+            position: absolute;
+            width: 40vw;
+            height: 40vw;
+            background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0) 70%);
+            border-radius: 50%;
+            z-index: -1;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div class="glow"></div>
+    <div class="container">
+		<img src="{% static 'images/LevLogo.png' %}" alt="Lev logo">
+        <h1>404 | Страница не найдена</h1>
+        <p>Страница, которую вы искали, исчезла.</p>
+        <a href="/admin" class="home-link">Назад</a>
+    </div>
+</body>
+</html>

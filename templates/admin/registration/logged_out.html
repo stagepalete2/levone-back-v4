@@ -1,0 +1,22 @@
+{% extends "registration/logged_out.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+{% endblock %}
+
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+
+    <div class="card bg-base-100 w-96 shadow-xl m-auto">
+        <div class="card-body items-center text-center">
+            <h2 class="card-title">Вы вышли из системы</h2>
+            <p>Возвращаем на страницу логина...</p>
+
+            <div class="card-actions">
+                <a href="{% url 'admin:index' %}" class="btn btn-primary text-dark">{% translate 'Log in again' %}</a>
+            </div>
+        </div>
+    </div>
+
+{% endblock %}

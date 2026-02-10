@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block extrastyle %}
+  {{block.super}}
+  <link rel="stylesheet" href="{% static 'bootstrap5/css/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script>
+        // Force dark mode regardless of localStorage or system settings
+        document.documentElement.dataset.theme = "light";
+        
+        // Optional: Prevent the theme-switcher script from reverting it
+        localStorage.setItem('theme', 'light');
+    </script>
+    <style>
+        /* Hide the theme toggler so users don't try to click it */
+        .theme-toggle { display: none !important; }
+    </style>
+{% endblock %}
+
+{% block branding %}
+	<style>
+		.header{
+			background-color: black!important;
+		}
+	</style>
+  <div style="text-align: center;" class='d-flex flex-row gap-2 align-items-center'>
+    <!-- Your logo or image -->
+    <img src="{% static 'images/LevLogo.png' %}" alt="Levone Logo" style="max-height: 40px;"><br>
+    
+    <!-- Your custom title -->
+    <h1 id="site-name">
+      <a href="{% url 'admin:index' %}" style="text-decoration: none; color: inherit;">
+        Администрирование Levone
+      </a>
+    </h1>
+  </div>
+{% endblock %}
