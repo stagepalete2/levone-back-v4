@@ -1,0 +1,215 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<!-- Bootstrap 5.3 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+<!-- Bootstrap Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* 1. Стиль таблицы в светлой теме */
+    .custom-table-container {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .table {
+        margin-bottom: 0;
+        color: #333333;
+    }
+
+    .table thead th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #eeeeee;
+        color: #666666;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 0.5px;
+        padding: 14px 16px;
+        font-weight: 700;
+    }
+
+    .table tbody td {
+        padding: 16px;
+        vertical-align: middle;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.85rem;
+        background: #ffffff;
+    }
+
+    .table tbody tr:hover td {
+        background-color: #fcfdfd !important;
+    }
+
+    /* 2. Стили индикаторов (Status Badges) для светлой темы */
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 50px; /* Сделаем более закругленными */
+        font-size: 0.72rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    /* Зеленый: Да */
+    .status-true { 
+        background: #e8f5e9; 
+        color: #2e7d32; 
+        border: 1px solid #c8e6c9; 
+    }
+    /* Красный: Нет */
+    .status-false { 
+        background: #ffebee; 
+        color: #c62828; 
+        border: 1px solid #ffcdd2; 
+    }
+
+    /* 3. Кнопка VK (Светлая версия) */
+    .btn-vk {
+        background: #f0f4ff;
+        border: 1px solid #d0d7f1;
+        color: #4c66a4;
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: all 0.2s ease-in-out;
+        border-radius: 6px;
+    }
+    .btn-vk:hover {
+        background: #4c66a4;
+        color: white;
+        border-color: #4c66a4;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(76, 102, 164, 0.2);
+    }
+
+    /* 4. Навигация (Breadcrumbs) */
+    .breadcrumbs {
+        background: #ffffff;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 12px 24px;
+        font-size: 13px;
+        color: #666;
+    }
+
+    .breadcrumbs a {
+        color: #28a745; /* Ваш основной зеленый цвет */
+        text-decoration: none;
+    }
+
+    .breadcrumbs a:hover {
+        text-decoration: underline;
+    }
+
+    /* Дополнительные утилиты */
+    .text-main-black { color: #212529 !important; }
+    .text-main-muted { color: #888888 !important; }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    {% for crumb in breadcrumbs %}
+        {% if crumb.url %}
+            <a href="{{ crumb.url }}">{{ crumb.title }}</a>
+        {% else %}
+            <span style="font-weight: 600; color: #333;">{{ crumb.title }}</span>
+        {% endif %}
+        {% if not forloop.last %} <span style="margin: 0 8px; color: #ccc;">&rsaquo;</span> {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4" style="min-height: 100vh;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h4 fw-bold text-main-black mb-1">
+                <span style="color: #28a745;">#</span> {{ stat }}
+            </h1>
+            <p class="text-main-muted small mb-0">Детальный список клиентов по выбранному показателю</p>
+        </div>
+        <div class="badge bg-white border text-dark py-2 px-3 shadow-sm" style="border-radius: 8px;">
+            Всего записей: <span class="fw-bold" style="color: #28a745;">{{ clients|length }}</span>
+        </div>
+    </div>
+
+    <div class="custom-table-container">
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Клиент</th>
+                        <th>Дата рождения</th>
+                        <th class="text-center">Сторис</th>
+                        <th class="text-center">Сообщество</th>
+                        <th class="text-center">Инвайт</th>
+                        <th class="text-end">Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                    <tr>
+                        <td>
+                            <div class="fw-bold text-main-black">{{ client.client.name }} {{ client.client.lastname }}</div>
+                            <small class="text-main-muted">ID: {{ client.client.vk_user_id }}</small>
+                        </td>
+                        <td>
+                            {% if client.birth_date %}
+                                <span class="text-main-black">{{ client.birth_date|date:"d M Y" }}</span>
+                            {% else %}
+                                <span class="text-main-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if client.isStoryUploaded %}
+                                <span class="status-badge status-true">Да</span>
+                            {% else %}
+                                <span class="status-badge status-false">Нет</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if client.isJoinedCommunity %}
+                                <span class="status-badge status-true">Да</span>
+                            {% else %}
+                                <span class="status-badge status-false">Нет</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if client.isReffered %}
+                                <span class="status-badge status-true">Да</span>
+                            {% else %}
+                                <span class="status-badge status-false">Нет</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if client.client.vk_user_id %}
+                                <a href="{% url 'away' vk_user_id=client.client.vk_user_id %}" target="_blank"
+                                class="btn btn-sm btn-vk px-3 shadow-sm">
+                                    Профиль VK
+                                </a>
+                            {% else %}
+                                <span class="text-main-muted small pe-3">
+                                    ID не указан
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-main-muted">
+                            <div class="mb-2 fs-2">📂</div>
+                            Данные отсутствуют
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

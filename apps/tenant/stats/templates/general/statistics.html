@@ -1,0 +1,316 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<!-- Bootstrap 5.3 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+<!-- Bootstrap Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* 1. Dashboard Layout */
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-bottom: 40px;
+    }
+
+    /* 2. Light Theme Cards */
+    .stat-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0 !important;
+        border-radius: 12px;
+        padding: 24px;
+        text-decoration: none !important;
+        transition: all 0.2s ease-in-out;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        height: 100%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .stat-card:hover {
+        transform: translateY(-3px);
+        border-color: #28a745 !important;
+        /* Зеленый акцент как в вашей админке */
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1) !important;
+        background: #f8fff9;
+    }
+
+    /* 3. Typography - Dark text for Light BG */
+    .stat-card h3 {
+        color: #666;
+        /* Неяркий текст для заголовков карточек */
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        text-align: left;
+    }
+
+    .stat-card .metric {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #212529;
+        /* Почти черный */
+        line-height: 1;
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #333;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    /* 4. Chart Containers */
+    .chart-container {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .chart-container h3 {
+        color: #333;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    /* Text colors for light theme */
+    .text-custom-dark {
+        color: #444 !important;
+    }
+
+    .text-custom-muted {
+        color: #777 !important;
+    }
+
+    /* Fix for Admin Sidebar when Bootstrap is loaded */
+    #nav-sidebar, #nav-sidebar * {
+        box-sizing: content-box !important;
+    }
+    #nav-sidebar ul {
+        padding-left: 0;
+        margin-bottom: 0;
+        list-style: none;
+    }
+    #nav-sidebar li {
+        list-style: none;
+    }
+    #header, #header * {
+         box-sizing: content-box !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-4" style="background-color: #f4f7f6; min-height: 100vh;">
+
+    <h1 class="section-title">
+        <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">📊</span>
+        Статистика — {{ tenant_name|default:"Все клиенты" }}
+    </h1>
+
+    <p class='text-custom-dark fs-5 mb-1'>
+        На данной странице представлена сводная статистика по всем ресторанам.
+    </p>
+    <p class='text-custom-muted fs-6 mb-4'>
+        Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RFM-статистику</strong>.
+    </p>
+
+    <div class="dashboard-grid">
+
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}" class="stat-card">
+            <h3>Оцифрованные гости</h3>
+            <div class="metric">{{ stats.total_clients|default:0 }}</div>
+        </a>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}" class="stat-card">
+            <h3>За месяц</h3>
+            <div class="metric" style="color: #28a745;">{{ stats.total_clients_last_month|default:0 }}</div>
+        </a>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}" class="stat-card">
+            <h3>Новые + 1-й подарок</h3>
+            <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
+        </a>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}" class="stat-card">
+            <h3>Вернулись 2-й раз</h3>
+            <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
+        </a>
+
+        <div class="stat-card" style="border-left: 4px solid #e91e63 !important;">
+            <h3>🎂 Отправлено поздравлений ДР</h3>
+            <div class="metric">{{ stats.sent_greetings|default:0 }}</div>
+        </div>
+
+        <div class="stat-card" style="border-left: 4px solid #9c27b0 !important;">
+            <h3>🎁 Активировано подарков ДР</h3>
+            <div class="metric" style="color: #9c27b0;">{{ stats.activated_birthday_prizes|default:0 }}</div>
+        </div>
+
+        <div class="stat-card" style="border-left: 4px solid #00bcd4 !important;">
+            <h3>📨 % открываемости</h3>
+            <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|default:0 }}%</div>
+            <small class="text-muted">Прочитано / Доставлено</small>
+        </div>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}" class='stat-card'>
+            <h3>Купили подарки</h3>
+            <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
+        </a>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}" class="stat-card">
+            <h3>Опубликовали истории</h3>
+            <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
+        </a>
+
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}" class="stat-card">
+            <h3>Из историй</h3>
+            <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
+        </a>
+
+        <div class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
+            <h3>🔄 Индекс сканирования</h3>
+            <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|default:0 }}%</div>
+            <small class="text-muted">QR сканирования ÷ Гости из IIKO</small>
+        </div>
+
+        <div class="stat-card">
+            <h3>📱 QR сканирований сегодня</h3>
+            <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>👥 Гостей IIKO сегодня</h3>
+            <div class="metric">{{ stats.iiko_guests_today|default:0 }}</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>📬 Подписчиков группы</h3>
+            <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
+        </div>
+
+        <div class="stat-card">
+            <h3>📨 Подписчиков рассылки</h3>
+            <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Источники</h3>
+                <canvas id="referralChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Активность</h3>
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Повторные визиты</h3>
+                <canvas id="returnChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Подарки и истории</h3>
+                <canvas id="engagementChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Global Chart.js Defaults for Light Mode
+    Chart.defaults.color = '#555';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+
+    const commonOptions = {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: { padding: 15, usePointStyle: true, font: { size: 11 } }
+            }
+        },
+        borderWidth: 2,
+        borderColor: '#ffffff'
+    };
+
+    const total = {{ stats.total_clients|default:0 }};
+    const emptyColor = '#f0f0f0'; // Светло-серый для пустых областей
+
+    // Referral Chart
+    new Chart(document.getElementById('referralChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Реферал', 'Прямые'],
+            datasets: [{
+                data: [{{ stats.clients_from_referral |default:0 }}, Math.max(total - {{ stats.clients_from_referral |default:0 }}, 0)],
+    backgroundColor: ['#28a745', emptyColor]
+            }]
+        },
+    options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // Activity Chart
+    new Chart(document.getElementById('activityChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['С историей', 'Остальные'],
+            datasets: [{
+                data: [{{ stats.clients_posted_story |default:0 }}, Math.max(total - {{ stats.clients_posted_story |default:0 }}, 0)],
+    backgroundColor: ['#dc3545', emptyColor]
+            }]
+        },
+    options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // Return Chart
+    new Chart(document.getElementById('returnChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Повторно', 'Разово'],
+            datasets: [{
+                data: [{{ stats.clients_returned_second_time |default:0 }}, Math.max(total - {{ stats.clients_returned_second_time |default:0 }}, 0)],
+    backgroundColor: ['#17a2b8', emptyColor]
+            }]
+        },
+    options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // Engagement Chart
+    new Chart(document.getElementById('engagementChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Подарок', 'История', 'Прочие'],
+            datasets: [{
+                data: [
+                    {{ stats.new_clients_received_super_prize |default:0 }},
+            {{ stats.clients_posted_story |default:0 }},
+        Math.max(total - {{ stats.new_clients_received_super_prize |default:0 }} - {{ stats.clients_posted_story |default:0 }}, 0)
+                ],
+    backgroundColor: ['#ffc107', '#6610f2', emptyColor]
+            }]
+        },
+    options: { ...commonOptions, cutout: '75%' }
+    });
+</script>
+{% endblock %}

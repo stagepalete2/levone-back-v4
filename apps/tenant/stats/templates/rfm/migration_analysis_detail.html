@@ -1,0 +1,201 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<!-- Bootstrap 5.3 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+<!-- Bootstrap Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* Scoped styles for migration page */
+    .migration-wrapper { padding: 30px; max-width: 1400px; margin: 0 auto; font-family: 'Inter', system-ui, sans-serif; }
+    
+    .content-card { 
+        background: white; border-radius: 12px; border: 1px solid #e0e0e0; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.03); padding: 25px; margin-bottom: 30px; 
+    }
+    
+    .sankey-area { 
+        background: #fff; min-height: 300px; display: flex; 
+        align-items: center; justify-content: center; 
+    }
+    
+    /* Tables */
+    .table-migration { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+    .table-migration td { padding: 12px; border-bottom: 1px solid #f0f0f0; background: #fff; }
+    .segment-pill { 
+        padding: 4px 10px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; 
+        display: inline-block; min-width: 80px; text-align: center;
+    }
+    
+    /* Guest Cards */
+    .guest-card { 
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; 
+        padding: 20px; height: 100%; transition: transform 0.2s; 
+    }
+    .guest-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px rgba(0,0,0,0.05); }
+    
+    .timeline { border-left: 2px solid #e9ecef; margin-left: 10px; padding-left: 20px; margin-top: 15px; }
+    .timeline-item { position: relative; margin-bottom: 15px; }
+    .timeline-item::before { 
+        content: ''; position: absolute; left: -26px; top: 4px; width: 10px; height: 10px; 
+        border-radius: 50%; background: #fff; border: 2px solid #ccc; 
+    }
+    .timeline-item.growth::before { border-color: #28a745; background: #28a745; }
+    .timeline-item.churn::before { border-color: #dc3545; background: #dc3545; }
+    
+    /* KPI Boxes */
+    .kpi-box { padding: 20px; border-radius: 10px; text-align: center; height: 100%; }
+    .kpi-val { font-size: 2rem; font-weight: 800; line-height: 1.2; }
+    .kpi-label { text-transform: uppercase; font-size: 0.7rem; letter-spacing: 1px; margin-bottom: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="migration-wrapper">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1">📈 История миграции гостей</h1>
+            <p class="text-muted mb-0">Филиал: {{ branch.name }}</p>
+        </div>
+        
+        <form method="GET" class="d-flex gap-3 bg-white p-2 rounded border shadow-sm">
+            <select name="days" class="form-select border-0 bg-light fw-bold" style="width: 160px;">
+                <option value="7" {% if days == 7 %}selected{% endif %}>7 дней</option>
+                <option value="14" {% if days == 14 %}selected{% endif %}>14 дней</option>
+                <option value="30" {% if days == 30 %}selected{% endif %}>30 дней</option>
+                <option value="90" {% if days == 90 %}selected{% endif %}>90 дней</option>
+            </select>
+            
+            <select name="segment" class="form-select border-0 bg-light fw-bold" style="width: 200px;">
+                <option value="">Все сегменты</option>
+                {% for seg in all_segments %}
+                    <option value="{{ seg.code }}" {% if selected_segment == seg.code %}selected{% endif %}>
+                        {{ seg.emoji }} {{ seg.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            
+            <button type="submit" class="btn btn-dark rounded px-3">Обновить</button>
+        </form>
+    </div>
+
+    <div class="content-card">
+        <h5 class="fw-bold mb-4">Потоки перемещения клиентов</h5>
+        <div id="sankey_chart" class="sankey-area">
+            <div class="spinner-border text-secondary" role="status"></div>
+        </div>
+    </div>
+
+    <h5 class="fw-bold mb-3 mt-5">Последние изменения статусов</h5>
+    <div class="row g-4 mb-5">
+        {% for guest in recent_guests|slice:":3" %}
+        <div class="col-md-4">
+            <div class="guest-card">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center fw-bold text-primary border" style="width: 40px; height: 40px;">
+                        {{ guest.info.client.name|slice:":1" }}
+                    </div>
+                    <div>
+                        <div class="fw-bold">{{ guest.info.client.name }} {{ guest.info.client.lastname }}</div>
+                        <a href="https://vk.com/id{{ guest.info.client.vk_user_id }}" target="_blank" class="small text-decoration-none">Профиль VK</a>
+                    </div>
+                </div>
+                
+                <div class="alert alert-light border text-center py-2 mb-3">
+                    <small class="text-muted d-block">ТЕКУЩИЙ СТАТУС</small>
+                    <span class="fw-bold" style="color: {{ guest.current.segment.color }}">{{ guest.current.segment.name }}</span>
+                </div>
+
+                <div class="timeline">
+                    {% for log in guest.history %}
+                    <div class="timeline-item {% if log.to_segment.code > log.from_segment.code %}growth{% else %}churn{% endif %}">
+                        <div class="small text-muted">{{ log.migrated_at|date:"d.m.Y" }}</div>
+                        <div class="small fw-bold">
+                            {{ log.from_segment.code }} → {{ log.to_segment.code }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12 text-center text-muted py-5">
+            За выбранный период миграций не зафиксировано
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="content-card">
+        <h5 class="fw-bold mb-4">Эффективность за период</h5>
+        <div class="row g-3">
+            <div class="col-md">
+                <div class="kpi-box" style="background: #f0fff4; color: #166534;">
+                    <div class="kpi-label">Рост лояльности</div>
+                    <div class="kpi-val">+{{ growth_count }}</div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="kpi-box" style="background: #fff7ed; color: #9a3412;">
+                    <div class="kpi-label">Остывание</div>
+                    <div class="kpi-val">{{ natural_cooling_count }}</div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="kpi-box" style="background: #fef2f2; color: #991b1b;">
+                    <div class="kpi-label">Отток в R0</div>
+                    <div class="kpi-val">{{ real_churn_count }}</div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="kpi-box" style="background: #eff6ff; color: #1e40af;">
+                    <div class="kpi-label">Реактивация</div>
+                    <div class="kpi-val">{{ reactivation_count }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+<script type="text/javascript">
+    google.charts.load('current', {'packages':['sankey']});
+    google.charts.setOnLoadCallback(drawChart);
+
+    function drawChart() {
+        const container = document.getElementById('sankey_chart');
+        
+        // Data from Django Context
+        // Safe filter is required because backend sends JSON string
+        const rawData = {{ sankey_data|safe }};
+
+        if (!rawData || rawData.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-5">Нет данных для построения диаграммы за этот период</div>';
+            return;
+        }
+
+        var data = new google.visualization.DataTable();
+        data.addColumn('string', 'From');
+        data.addColumn('string', 'To');
+        data.addColumn('number', 'Guests');
+        data.addRows(rawData);
+
+        var options = {
+            width: '100%',
+            height: 300,
+            sankey: {
+                node: { 
+                    label: { fontName: 'Inter', fontSize: 12, bold: true, color: '#333' },
+                    nodePadding: 20,
+                    width: 12
+                },
+                link: { colorMode: 'gradient', fillOpacity: 0.2 }
+            }
+        };
+
+        var chart = new google.visualization.Sankey(container);
+        chart.draw(data, options);
+    }
+</script>
+{% endblock %}

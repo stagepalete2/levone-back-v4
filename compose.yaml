@@ -1,0 +1,71 @@
+services:
+
+
+  db:
+    image: library/postgres:16
+    ports:
+      - 5432:5432
+    restart: unless-stopped
+    env_file:
+      - .env.dev
+    networks:
+      - postgres-network
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+  
+
+  celery_worker:
+    build: .
+    command: celery -A main worker -l info
+    volumes:
+      - ./:/app  # <--- ГЛАВНАЯ МАГИЯ. Текущая папка пробрасывается в /app контейнера
+    depends_on:
+      - redis
+      - db
+    environment:
+      # ВАЖНО: Переопределяем хосты для Докера
+      # Локально у вас localhost, а внутри сети Докера нужны имена сервисов
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env.dev
+    networks:
+      - postgres-network
+
+  celery_beat:
+    build: .
+    container_name: celery_beat
+    command: celery -A main beat -l info
+    restart: always
+    depends_on:
+      - redis
+    networks:
+      - postgres-network
+    env_file:
+      - .env.dev
+    environment:
+      # И СЮДА ТОЖЕ, на всякий случай:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+  
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - postgres-network
+    command: redis-server --appendonly yes
+    volumes:
+      - ./redis_data:/data
+
+networks:
+  postgres-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

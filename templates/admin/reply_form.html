@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+    .reply-form {
+        max-width: 600px;
+        margin: 20px 0;
+        padding: 20px;
+        background: var(--body-bg);
+        border: 1px solid var(--hairline-color);
+        border-radius: 4px;
+    }
+
+    .reply-form textarea {
+        width: 100%;
+        min-height: 150px;
+        margin-bottom: 15px;
+        padding: 10px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+    }
+
+    .review-item {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: var(--darkened-bg);
+        border-left: 4px solid var(--primary);
+    }
+</style>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="{% static 'branch/js/ai_reply.js' %}"></script>
+{% endblock %}
+
+
+{% block content %}
+<div class="content-main">
+    <h1>Ответ на отзыв</h1>
+
+    {% for obj in items %}
+    <div class="review-item">
+        <h3>Отзыв от {{ obj.client|default:obj.vk_sender_id }} ({{ obj.created_at|date:"d.m.Y H:i" }})</h3>
+        <p><strong>Рейтинг:</strong> {{ obj.rating }}/5</p>
+        <p><strong>Текст:</strong> {{ obj.review }}</p>
+        {% if obj.ai_comment %}
+        <p><em>AI Анализ: {{ obj.ai_comment }}</em></p>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="reply-form">
+        <form action="" method="post">
+            {% csrf_token %}
+            <div style="margin-bottom: 20px;">
+                {{ form.as_p }}
+
+                <button type="button" id="generate-ai-btn" class="button"
+                    style="background: #264b5d; margin-top: 10px;">✨ Сгенерировать ответ (AI)</button>
+                <span id="ai-loading" style="display:none; margin-left: 10px;">Генерация...</span>
+                <div id="ai-error" style="color: red; margin-top: 5px;"></div>
+            </div>
+
+            {% for item in items %}
+            <input type="hidden" name="_selected_action" value="{{ item.pk }}" />
+            <!-- Hidden data for AI -->
+            <div class="review-data" data-text="{{ item.review }}" data-rating="{{ item.rating }}"
+                style="display:none;"></div>
+            {% endfor %}
+
+            <input type="hidden" name="action" value="reply_to_review_action" />
+            <input type="hidden" name="apply" value="1" />
+
+            <div class="submit-row" style="margin-top: 20px;">
+                <input type="submit" name="apply" value="Отправить" class="default"
+                    style="background: var(--primary); padding: 10px 20px; color: white; border: none; cursor: pointer; border-radius: 4px;" />
+                <a href="#" onclick="window.history.back(); return false;" class="button"
+                    style="float: right; padding: 10px 20px;">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
