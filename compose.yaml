@@ -1,5 +1,20 @@
 services:
 
+  web:
+    build: .
+    ports:
+      - "6000:6000"
+    restart: always
+    depends_on:
+      - db
+      - redis
+    networks:
+      - postgres-network
+    env_file:
+      - .env
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
 
   db:
     image: library/postgres:16
