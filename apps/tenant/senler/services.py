@@ -270,15 +270,12 @@ class VKService:
             from apps.tenant.branch.models import ClientBranch
             
             total_with_vk = ClientBranch.objects.filter(
-                client__vk_user_id__isnull=False
+                client__vk_user_id__isnull=False,
+                is_allowed_message=True
+
             ).count()
             
-            # Вычитаем заблокированных (unique clients с blocked статусом)
-            blocked_clients = MessageLog.objects.filter(
-                status='blocked'
-            ).values('client_id').distinct().count()
-            
-            return max(0, total_with_vk - blocked_clients)
+            return max(0, total_with_vk)
         except Exception as e:
             logger.error(f"Error getting mailing subscribers count: {e}")
             return 0
