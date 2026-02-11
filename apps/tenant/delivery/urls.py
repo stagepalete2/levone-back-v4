@@ -5,6 +5,7 @@ from apps.tenant.delivery.views import (
 )
 
 urlpatterns = [
-    path('delivery/rf/', DeliveryRFAnalyticsView.as_view(), name='delivery-rf-statistics'),
-    path('delivery/rf/migration/', DeliveryRFMigrationView.as_view(), name='delivery-rf-migration'),
+    # Добавляем <int:id> для идентификации филиала
+    path('branch/<int:id>/delivery/rf/', DeliveryRFAnalyticsView.as_view(), name='delivery-rf-statistics'),
+    path('branch/<int:id>/delivery/rf/migration/', DeliveryRFMigrationView.as_view(), name='delivery-rf-migration'),
 ]

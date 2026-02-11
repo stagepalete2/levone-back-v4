@@ -3,7 +3,7 @@ services:
   web:
     build: .
     ports:
-      - "6000:6000"
+      - "7000:7000"
     restart: always
     depends_on:
       - db
@@ -11,7 +11,7 @@ services:
     networks:
       - postgres-network
     env_file:
-      - .env
+      - .env.dev
     volumes:
       - ./staticfiles:/app/staticfiles
       - ./media:/app/media
@@ -19,12 +19,12 @@ services:
   db:
     image: library/postgres:16
     ports:
-      - 5431:5431
+      - 5432:5432
     restart: unless-stopped
-    env_file:
-      - .env.dev
     networks:
       - postgres-network
+    env_file:
+      - .env.dev
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
   
@@ -33,13 +33,11 @@ services:
     build: .
     command: celery -A main worker -l info
     volumes:
-      - ./:/app  # <--- ГЛАВНАЯ МАГИЯ. Текущая папка пробрасывается в /app контейнера
+      - ./:/app
     depends_on:
       - redis
       - db
     environment:
-      # ВАЖНО: Переопределяем хосты для Докера
-      # Локально у вас localhost, а внутри сети Докера нужны имена сервисов
       - POSTGRES_HOST=db
       - REDIS_HOST=redis
       - CELERY_BROKER_URL=redis://redis:6379/0

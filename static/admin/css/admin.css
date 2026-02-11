@@ -1,0 +1,46 @@
+body {
+    /* font-family: var(--font-family)!important; */
+    font-size: 13px !important; /* Django's default font size */
+    line-height: normal !important;
+}
+
+/* 2. Reset Heading sizes to match Django Admin expectations */
+h1 { font-size: 20px !important; font-weight: 300 !important; }
+h2 { font-size: 16px !important; font-weight: 300 !important; }
+h3 { font-size: 14px !important; font-weight: 500 !important; }
+
+/* 3. Fix Table Header text size */
+.module table thead th {
+    font-size: 13px !important;
+}
+
+/* 4. Ensure Bootstrap utility classes still work for your custom cards */
+/* This specifically allows your stats numbers to stay big if you want them to */
+.h2.fw-bold {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+}
+
+caption {
+    caption-side: top !important;
+}
+
+
+.content {
+	background-color: var(--body-bg)!important;
+}
+
+#nav-sidebar .module th, 
+#nav-sidebar .module td {
+    background: transparent !important;
+}
+
+#nav-sidebar .module {
+    background: none !important;
+}
+
+/* Ensure the main content area respects Django's theme variables over Bootstrap's */
+#content {
+    background-color: var(--body-bg) !important;
+    color: var(--body-fg) !important;
+}

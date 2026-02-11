@@ -1,9 +1,9 @@
-from django.views.generic import TemplateView
+from django.views.generic import DetailView  # <-- Важно: DetailView вместо TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.exceptions import PermissionDenied
 
 from apps.shared.config.sites import tenant_admin
-from apps.tenant.delivery.models import Delivery
+from apps.tenant.branch.models import Branch  # <-- Не забудьте импортировать Branch
 from apps.tenant.delivery.core import DeliveryRFService
 from apps.tenant.stats.models import RFSegment
 
@@ -25,15 +25,19 @@ class BaseAdminDeliveryView(LoginRequiredMixin, UserPassesTestMixin):
         return context
 
 
-class DeliveryRFAnalyticsView(BaseAdminDeliveryView, TemplateView):
-    """Матрица RFM для доставки"""
+class DeliveryRFAnalyticsView(BaseAdminDeliveryView, DetailView):
+    """Матрица RFM для доставки (конкретный филиал)"""
     template_name = 'delivery_rfm/statistics.html'
+    model = Branch               # <-- Указываем модель
+    pk_url_kwarg = 'id'          # <-- Имя параметра из urls.py
+    context_object_name = 'branch'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        # Получаем статистику через сервис
-        matrix_data = DeliveryRFService.get_matrix_data()
+        branch = self.object     # <-- Получаем текущий филиал
+
+        # Передаем branch в сервис
+        matrix_data = DeliveryRFService.get_matrix_data(branch) 
         ranges = DeliveryRFService.get_segment_ranges(matrix_data['segments'])
         
         context.update({
@@ -57,19 +61,31 @@ class DeliveryRFAnalyticsView(BaseAdminDeliveryView, TemplateView):
         return context
 
 
-class DeliveryRFMigrationView(BaseAdminDeliveryView, TemplateView):
-    """История миграций для доставки"""
+class DeliveryRFMigrationView(BaseAdminDeliveryView, DetailView):
+    """История миграций для доставки (конкретный филиал)"""
     template_name = 'delivery_rfm/migration.html'
+    model = Branch               # <-- Указываем модель
+    pk_url_kwarg = 'id'          # <-- Имя параметра из urls.py
+    context_object_name = 'branch'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        branch = self.object     # <-- Получаем текущий филиал
         
         # Получаем период из параметров
-        days = int(self.request.GET.get('days', 30))
+        try:
+            days = int(self.request.GET.get('days', 30))
+        except (ValueError, TypeError):
+            days = 30
+            
         segment_code = self.request.GET.get('segment', '')
         
-        # Получаем данные миграций
-        stats = DeliveryRFService.get_migration_stats(days=days, segment_code=segment_code)
+        # Передаем branch в сервис
+        stats = DeliveryRFService.get_migration_stats(
+            branch=branch, 
+            days=days, 
+            segment_code=segment_code
+        )
         
         context.update({
             'sankey_data': stats['sankey_data'],

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django_tenants.utils import tenant_context, get_tenant_model, get_tenant_domain_model
-
+from django.utils import timezone
 
 class PublicAdminSite(admin.AdminSite):
     site_header = "Levelup.ru - Панель супер-администратора"
@@ -64,7 +64,36 @@ class TenantAdminSite(admin.AdminSite):
 
     def index(self, request, extra_context=None):
         extra_context = extra_context or {}
+    
+        if getattr(request.tenant, 'schema_name', None) == 'public':
+            return super().index(request, extra_context=extra_context)
+        # We import here to avoid circular imports
+        from apps.tenant.branch.models import Branch
+        from apps.tenant.game.models import DailyCode as GameDailyCodes
+        from apps.tenant.quest.models import DailyCode as QuestDailyCodes
+        
+        extra_context = extra_context or {}
+        today = timezone.localdate()
+        branch_codes = []
+
+        # No tenant_context loop needed! 
+        # Django is already connected to the specific tenant's schema.
+        branches = Branch.objects.all()
+        
+        for branch in branches:
+            game_code = GameDailyCodes.objects.filter(date=today, branch=branch).first()
+            quest_code = QuestDailyCodes.objects.filter(date=today, branch=branch).first()
+
+            branch_codes.append({
+                "branch": branch.name,
+                "game_code": game_code.code if game_code else "Не сгенерирован",
+                "quest_code": quest_code.code if quest_code else "Не сгенерирован",
+            })
+        
+        extra_context['today'] = today
+        extra_context['branch_codes'] = branch_codes
         return super().index(request, extra_context=extra_context)
+
 
 
 public_admin = PublicAdminSite(name='public_admin')

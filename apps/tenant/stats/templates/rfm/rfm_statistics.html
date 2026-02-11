@@ -108,6 +108,14 @@
                     <a href="{% url 'rf-migration-statistics' id=branch.id %}" class="btn btn-success btn-action shadow-sm text-dark" style="background-color: #28a745; border-color: #28a745;">
                         <i class="bi bi-clock-history me-2"></i>История миграции
                     </a>
+                    <hr>
+                    <a href="{% url 'delivery-rf-statistics' id=branch.id %}" class="btn btn-primary btn-action shadow-sm text-dark">
+                        <i class="bi bi-matrix me-2"></i>RFM-анализ доставки
+                    </a>
+                    <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn btn-success btn-action shadow-sm text-dark" style="background-color: #28a745; border-color: #28a745;">
+                        <i class="bi bi-clock-history me-2"></i>История миграции доставки
+                    </a>
+                    
                 </div>
             </div>
         </div>
