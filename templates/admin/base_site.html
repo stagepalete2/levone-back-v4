@@ -2,41 +2,139 @@
 {% load static %}
 
 {% block extrastyle %}
-  {{block.super}}
+  {{ block.super }}
   <link rel="stylesheet" href="{% static 'bootstrap5/css/bootstrap.min.css' %}">
   <link rel="stylesheet" href="{% static 'admin/css/admin.css' %}">
+  <style>
+    /* ═══════════════════════════════════════════════════════
+       Global Fix: Bootstrap 5 vs Django Admin Sidebar
+       ═══════════════════════════════════════════════════════
+       Bootstrap ставит глобально:
+         *, *::before, *::after { box-sizing: border-box }
+         html { scroll-behavior: smooth }
+       Это ломает sticky-sidebar Django admin:
+       - высота пересчитывается → sidebar растягивается
+       - smooth scroll → при reload анимирует «прыжок» наверх
+       ═══════════════════════════════════════════════════════ */
+
+    /* 1. Убиваем smooth-scroll (главная причина прыжка) */
+    html, body {
+        scroll-behavior: auto !important;
+    }
+
+    /* 2. Admin chrome: восстанавливаем content-box */
+    #container,
+    #container > *,
+    #header,
+    #header * {
+        box-sizing: content-box !important;
+    }
+
+    /* 3. #main — flex-родитель sidebar + content */
+    #main {
+        display: flex !important;
+        align-items: stretch !important;
+    }
+
+    /* 4. Sidebar: sticky-колонка, привязана к viewport */
+    #nav-sidebar {
+        box-sizing: content-box !important;
+        position: sticky !important;
+        top: 0 !important;
+        align-self: flex-start !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        width: 275px !important;
+        min-width: 275px !important;
+        flex-shrink: 0 !important;
+        scroll-behavior: auto !important;
+        z-index: 10;
+    }
+
+    #nav-sidebar * {
+        box-sizing: content-box !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* 5. Undo Bootstrap list resets внутри sidebar */
+    #nav-sidebar ul {
+        padding-left: 0;
+        margin-bottom: 0;
+        list-style: none;
+    }
+    #nav-sidebar li {
+        list-style: none;
+    }
+
+    /* 6. Content area — Bootstrap работает нормально */
+    #content {
+        box-sizing: border-box !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
+    }
+    #content * {
+        box-sizing: border-box !important;
+    }
+  </style>
 {% endblock %}
 
 {% block extrahead %}
     {{ block.super }}
     <script>
-        // Force dark mode regardless of localStorage or system settings
+        // Force light theme
         document.documentElement.dataset.theme = "light";
-        
-        // Optional: Prevent the theme-switcher script from reverting it
         localStorage.setItem('theme', 'light');
     </script>
     <style>
-        /* Hide the theme toggler so users don't try to click it */
         .theme-toggle { display: none !important; }
     </style>
 {% endblock %}
 
 {% block branding %}
-	<style>
-		.header{
-			background-color: black!important;
-		}
-	</style>
+  <style>
+    .header {
+        background-color: black !important;
+    }
+  </style>
   <div style="text-align: center;" class='d-flex flex-row gap-2 align-items-center'>
-    <!-- Your logo or image -->
     <img src="{% static 'images/LevLogo.png' %}" alt="Levone Logo" style="max-height: 40px;"><br>
-    
-    <!-- Your custom title -->
     <h1 id="site-name">
       <a href="{% url 'admin:index' %}" style="text-decoration: none; color: inherit;">
         Администрирование Levone
       </a>
     </h1>
   </div>
+{% endblock %}
+
+{% block extrajs %}
+  {{ block.super }}
+  <script>
+    /* ═══ Sidebar scroll persistence ═══
+       Сохраняет scrollTop sidebar в sessionStorage
+       и восстанавливает при загрузке любой страницы админки. */
+    (function() {
+        var KEY = 'django_sidebar_scroll';
+        var sidebar = document.getElementById('nav-sidebar');
+        if (!sidebar) return;
+
+        // Восстанавливаем позицию после полного рендера
+        try {
+            var saved = sessionStorage.getItem(KEY);
+            if (saved !== null) {
+                requestAnimationFrame(function() {
+                    sidebar.scrollTop = parseInt(saved, 10);
+                });
+            }
+        } catch(e) {}
+
+        // Сохраняем при уходе со страницы
+        window.addEventListener('beforeunload', function() {
+            try {
+                sessionStorage.setItem(KEY, sidebar.scrollTop);
+            } catch(e) {}
+        });
+    })();
+  </script>
 {% endblock %}
