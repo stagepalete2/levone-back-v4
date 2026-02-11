@@ -86,6 +86,24 @@
         // Force light theme
         document.documentElement.dataset.theme = "light";
         localStorage.setItem('theme', 'light');
+
+        document.addEventListener("DOMContentLoaded", function() {
+            // Ищем стандартный сайдбар Django (ID nav-sidebar)
+            const sidebar = document.getElementById('nav-sidebar');
+
+            if (sidebar) {
+                // 1. Если в памяти есть сохраненная позиция, скроллим туда
+                const scrollPos = sessionStorage.getItem('django_sidebar_pos');
+                if (scrollPos) {
+                    sidebar.scrollTop = scrollPos;
+                }
+
+                // 2. Перед уходом со страницы сохраняем текущую позицию
+                window.addEventListener('beforeunload', function() {
+                    sessionStorage.setItem('django_sidebar_pos', sidebar.scrollTop);
+                });
+            }
+        });
     </script>
     <style>
         .theme-toggle { display: none !important; }
