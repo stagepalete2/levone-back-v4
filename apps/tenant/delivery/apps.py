@@ -4,3 +4,4 @@ from django.apps import AppConfig
 class DeliveryConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'apps.tenant.delivery'
+    verbose_name = 'Доставка'

@@ -35,7 +35,7 @@
         </div>
         
         <div class="d-flex gap-3">
-            <a href="{% url 'delivery-rf-statistics' %}" class="btn btn-outline-secondary">
+            <a href="{% url 'delivery-rf-statistics' id=branch.id %}" class="btn btn-outline-secondary">
                 <i class="bi bi-grid-3x3 me-2"></i>Матрица RF
             </a>
             <form method="GET" class="d-flex gap-3 bg-white p-2 rounded border shadow-sm">

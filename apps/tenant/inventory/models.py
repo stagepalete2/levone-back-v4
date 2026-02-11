@@ -125,7 +125,7 @@ class Cooldown(models.Model):
 		verbose_name='Клиент'
 	)
 
-	last_activated_at = models.DateTimeField(verbose_name='Последняя покупка', null=True, blank=True)
+	last_activated_at = models.DateTimeField(verbose_name='Последняя активация', null=True, blank=True)
 
 	duration = models.DurationField(default=timedelta(hours=18), verbose_name='Длительность')
 

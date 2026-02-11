@@ -4,6 +4,8 @@ from django.http import Http404
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Count, F
+from datetime import timedelta
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,6 +16,8 @@ from apps.shared.config.sites import tenant_admin
 
 from apps.tenant.branch.models import Branch, ClientBranch, CoinTransaction
 
+
+from apps.tenant.game.models import ClientAttempt
 from apps.tenant.stats.core import GeneralStatsService, RFAnalyticsService, RFMigrationService, VKIntegrationService, RFManagementService, RFGuestService
 from apps.tenant.stats.serializers import MigrationFilterSerializer, RFRecalculateSerializer, RFSettingsUpdateSerializer, RFGuestListSerializer
 from apps.tenant.stats.models import RFSegment, RFSettings, GuestRFScore
@@ -53,29 +57,86 @@ class StatisticsDetailView(BaseAdminStatsView, TemplateView):
     def get_context_data(self, stat_name, **kwargs):
         context = super().get_context_data(**kwargs)
         
-        # Логика маппинга имени статистики к QuerySet осталась здесь, 
-        # так как она специфична для этого представления (детализация). 
-        # Но сами расчеты можно было бы вынести в сервис, если бы они переиспользовались.
-        
-        # Для простоты и читаемости оставим "switch-case" здесь, но запросы оптимизированы.
+        # Базовый QuerySet
         qs = ClientBranch.objects.all()
-        
+        month_ago = timezone.now() - timedelta(days=30)
+
+        # --- ПОДГОТОВКА СЛОЖНЫХ ФИЛЬТРОВ ---
+
+        # 1. Вернулись 2-й раз (получаем ID клиентов, у которых > 1 попытки)
+        repeat_client_ids = ClientAttempt.objects.values('client')\
+            .annotate(attempt_count=Count('id'))\
+            .filter(attempt_count__gte=2)\
+            .values_list('client', flat=True)
+
+        # 2. День рождения (скан в ДР)
+        # Находим попытки, где дата создания совпадает с ДР клиента
+        birthday_attempt_ids = ClientAttempt.objects.filter(
+            client__birth_date__isnull=False, # client -> ClientBranch -> User(client) -> birth_date
+            created_at__day=F('client__birth_date__day'),
+            created_at__month=F('client__birth_date__month')
+        ).values_list('client', flat=True)
+
+
+        # --- КАРТА СТАТИСТИКИ (Mapping) ---
         title_map = {
-            "total_clients": ('Общее количество оцифрованных гостей', qs),
-            "clients_bought_prizes": ('Купили подарки', qs.filter(transactions__type=CoinTransaction.Type.EXPENSE)),
-            "clients_posted_story": ('Опубликовали истории', qs.filter(is_story_uploaded=True)),
-            "clients_from_referral": ('Перешли из историй', qs.filter(invited_by__isnull=False)),
+            # 1. Всего клиентов
+            "total_clients": (
+                'Общее количество оцифрованных гостей', 
+                qs
+            ),
+
+            # 2. Новые за месяц
+            "total_clients_last_month": (
+                'Новые за месяц', 
+                qs.filter(created_at__gte=month_ago)
+            ),
+
+            # 3. Получили суперприз (GAME)
+            "new_clients_received_super_prize": (
+                'Выиграли суперприз', 
+                qs.filter(
+                    is_joined_community=True,
+                    superprizes__acquired_from='GAME'
+                )
+            ),
+
+            # 4. Вернулись 2-й раз
+            "clients_returned_second_time": (
+                'Вернулись повторно', 
+                qs.filter(id__in=repeat_client_ids)
+            ),
+
+            # 5. Скан в День Рождения
+            "clients_birthday_qr": (
+                'Сканировали в День Рождения',
+                qs.filter(id__in=birthday_attempt_ids)
+            ),
+
+            # 6. Купили подарки (Трата коинов)
+            "clients_bought_prizes": (
+                'Купили подарки', 
+                qs.filter(transactions__type="EXPENSE")
+            ),
+
+            # 7. Выложили сторис
+            "clients_posted_story": (
+                'Опубликовали истории', 
+                qs.filter(is_story_uploaded=True)
+            ),
+
+            # 8. Рефералы
+            "clients_from_referral": (
+                'Перешли по реферальной ссылке', 
+                qs.filter(invited_by__isnull=False)
+            ),
         }
 
-        # Сложные кейсы обрабатываем отдельно (упрощенная версия)
         if stat_name in title_map:
             title, filtered_qs = title_map[stat_name]
             context['stat'] = title
-            context["clients"] = filtered_qs.distinct('client')
-        
-        # NOTE: Остальные кейсы (birthday, return_second_time) требуют более сложной фильтрации,
-        # которую лучше оставить как в оригинале или вынести в отдельные методы сервиса, 
-        # если этот View станет слишком большим. Для краткости здесь опущены остальные ветки if/else.
+            # distinct() важен, чтобы не дублировать клиентов в списке
+            context["clients"] = filtered_qs.distinct()
         
         context["stat_name"] = stat_name
         context["breadcrumbs"] = [

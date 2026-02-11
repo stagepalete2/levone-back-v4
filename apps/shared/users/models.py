@@ -10,8 +10,9 @@ class User(AbstractUser):
         on_delete=models.PROTECT, 
         null=True, 
         blank=True,
-        related_name='users'
+        related_name='users',
+        verbose_name='Клиент'
     )
 
     def __str__(self):
-        return f"{self.username} ({self.company.name if self.company else 'Global'})"
+        return f"{self.username} ({self.company.name if self.company else 'Глобальный'})"

@@ -45,5 +45,3 @@ class BranchSegmentSnapshotAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
 
 tenant_admin.register(RFSegment, RFSegmentAdmin)
 tenant_admin.register(RFSettings, RFSettingsAdmin)
-tenant_admin.register(GuestRFScore, GuestRFScoreAdmin)
-tenant_admin.register(BranchSegmentSnapshot, BranchSegmentSnapshotAdmin)

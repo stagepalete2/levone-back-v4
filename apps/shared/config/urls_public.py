@@ -10,4 +10,7 @@ urlpatterns = [
 ] 
 
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Обычно для STATIC_URL это не нужно, если включен 'django.contrib.staticfiles', 
+    # но если нужно явно раздавать собранную статику:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

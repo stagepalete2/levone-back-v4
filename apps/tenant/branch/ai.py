@@ -5,6 +5,7 @@ from django.conf import settings
 from anthropic import Anthropic
 from apps.tenant.branch.models import BranchTestimonials
 from apps.shared.clients.models import KnowledgeBase
+import httpx
 
 class AIService:
     @staticmethod
@@ -67,7 +68,8 @@ class AIService:
             print(f"AI Warning: No instructions found for company {company.name}")
             return
 
-        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        PROXY_URL = "http://212.192.220.63:8888"
+        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY, http_client=httpx.Client(proxy=PROXY_URL))
         
         user_message = f"Текст отзыва: {testimonial.review}\nОценка: {testimonial.rating}"
 
@@ -124,8 +126,9 @@ class AIService:
     def generate_reply(company, review_text, review_rating, draft_text=""):
         """Генерирует ответ на отзыв с учетом Tone of Voice"""
         instructions = AIService.get_classification_prompt(company) or "Будь вежлив и профессионален."
-        
-        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+        PROXY_URL = "http://212.192.220.63:8888"
+        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY, http_client=httpx.Client(proxy=PROXY_URL))
         
         system_prompt = (
             f"Ты профессиональный менеджер ресторана. Твоя задача - написать ответ на отзыв гостя.\n"
@@ -157,7 +160,8 @@ class AIService:
         Генерирует текст для рассылки на основе темы и тональности.
         """
         instructions = AIService.get_marketing_prompt(company) or "Будь вежлив и профессионален."
-        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        PROXY_URL = "http://212.192.220.63:8888"
+        client = Anthropic(api_key=settings.ANTHROPIC_API_KEY, http_client=httpx.Client(proxy=PROXY_URL))
         
         system_prompt = (
              "Ты профессиональный SMM-маркетолог. Твоя задача - написать эффективный текст рассылки для ВКонтакте.\n"

@@ -29,8 +29,8 @@ class Branch(TimeStampedModel):
         return self.name
     
     class Meta:
-        verbose_name = 'Торговая точка (Ресторан)'
-        verbose_name_plural = 'Торговые точки (Рестораны)'
+        verbose_name = 'Торговая точка'
+        verbose_name_plural = 'Торговые точки'
 
 class BranchConfig(TimeStampedModel):
     branch = models.OneToOneField(
@@ -82,8 +82,8 @@ class BotAdmin(TimeStampedModel):
         return f"{self.name} ({self.bot.name})"
     
     class Meta:
-        verbose_name = 'Админ'
-        verbose_name_plural = 'Админы бота'
+        verbose_name = 'Администратор'
+        verbose_name_plural = 'Администраторы ботов'
 
 
 class ClientBranch(TimeStampedModel):
@@ -225,8 +225,8 @@ class StoryImage(TimeStampedModel):
         return self.image.name
 
     class Meta:
-        verbose_name = 'Фото для сториса'
-        verbose_name_plural = 'Фото для сториса'
+        verbose_name = 'Фото для истории'
+        verbose_name_plural = 'Фото для истории'
 
 
 class BranchTestimonials(TimeStampedModel):
@@ -340,11 +340,11 @@ class Promotions(TimeStampedModel):
     title = models.CharField(max_length=100, verbose_name='Название')
     discount = models.PositiveIntegerField(verbose_name='Скидка (%)')
     dates = models.CharField(max_length=255, verbose_name='Даты')
-    images = models.ImageField(upload_to='promotions')
+    images = models.ImageField(upload_to='promotions', verbose_name='Фото')
 
     def __str__(self):
         return self.title
     
     class Meta:
         verbose_name = 'Скидка'
-        verbose_name_plural = 'Скидки и промо акции'
+        verbose_name_plural = 'Скидки и промоакции'

@@ -74,9 +74,9 @@ class ClientAttempt(TimeStampedModel):
     client = models.ForeignKey(
         'branch.ClientBranch', 
         on_delete=models.CASCADE, 
-        related_name='game_attempts', 
-        verbose_name='Игрок',
-        db_index=True  # <--- Добавь для ускорения проверки "Первая ли это игра?"
+        related_name='game_attempts',
+        db_index=True,
+        verbose_name='Гость'
     )
 
     served_by = models.ForeignKey(

@@ -460,8 +460,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="page-title mb-0">🎯 RF-Анализ гостей</h1>
-            <p class="text-muted mt-1 mb-0">{{ branch.name }} • Обновлено: {{ last_update|date:"d.m.Y
-                H:i"|default:"Недавно" }}</p>
+            <p class="text-muted mt-1 mb-0">{{ branch.name }} • Обновлено: {{ last_update|date:"d.m.Y H:i"|default:"Недавно" }}</p>
         </div>
         <input type="hidden" id='branch_id' value='{{ branch.id }}'>
     </div>
@@ -718,7 +717,7 @@
         // URL construction using Django pattern requires a placeholder replacement or a clean JS URL build
         // Assuming we have a URL pattern like /api/rf/segments/<code:segment_code>/
         // Using a safe trick with template literal in JS if endpoint is fixed
-        const fetchUrl = `/api/rf/segments/${code}/?branch=${branch}`;
+        const fetchUrl = `/analytics/api/v1/rf/segment-guest/${code}/?branch=${branch}`;
 
         fetch(fetchUrl)
             .then(res => {

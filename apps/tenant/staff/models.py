@@ -7,13 +7,14 @@ class EmployeeProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='tenant_profile'
+        related_name='tenant_profile',
+        verbose_name='Пользователь'
     )
     branches = models.ManyToManyField(
         Branch,
         blank=True,
         related_name='employees',
-        verbose_name="Доступные филиалы"
+        verbose_name='Доступные ресторан'
     )
 
     def __str__(self):

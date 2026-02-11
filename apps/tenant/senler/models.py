@@ -66,6 +66,19 @@ class MailingCampaign(TimeStampedModel):
     
     # Таргетинг
     segment = models.ForeignKey(RFSegment, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Сегмент (RFM)")
+
+    SEX_CHOICES = [
+        (0, 'Не указан'),
+        (1, 'Женский'),
+        (2, 'Мужской'),
+    ]
+    send_by_sex = models.PositiveSmallIntegerField(
+        choices=SEX_CHOICES, 
+        default=0, 
+        verbose_name="Отправить по признаку пола (Только Мужчинам / Только Женщинам)"
+    )
+
+    
     send_to_all = models.BooleanField(default=False, verbose_name="Отправить всем оцифрованным")
     specific_clients = models.ManyToManyField(ClientBranch, blank=True, verbose_name="Точечная отправка")
     
@@ -102,8 +115,8 @@ class MessageLog(TimeStampedModel):
     read_at = models.DateTimeField(blank=True, null=True, verbose_name="Дата прочтения")
 
     class Meta:
-        verbose_name = "Лог отправки"
-        verbose_name_plural = "Логи отправки"
+        verbose_name = "История отправок"
+        verbose_name_plural = "История отправок"
         ordering = ['-sent_at']
 
     def __str__(self):

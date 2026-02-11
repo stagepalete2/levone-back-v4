@@ -218,7 +218,7 @@
             <h1 class="h3 fw-bold mb-1">📦 RF-Анализ доставки</h1>
             <p class="text-muted mt-1 mb-0">Обновлено: {{ last_update|date:"d.m.Y H:i"|default:"Недавно" }}</p>
         </div>
-        <a href="{% url 'delivery-rf-migration' %}" class="btn btn-success">
+        <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn btn-success">
             <i class="bi bi-clock-history me-2"></i>История миграции
         </a>
     </div>

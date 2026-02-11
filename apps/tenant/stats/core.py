@@ -341,6 +341,33 @@ class RFCalculator:
         if migration_logs:
             RFMigrationLog.objects.bulk_create(migration_logs, batch_size=500)
 
+        # Обновляем снэпшот сегментов для филиала
+        self._update_segment_snapshot(today_date)
+
+    def _update_segment_snapshot(self, snapshot_date):
+        """Создаёт/обновляет BranchSegmentSnapshot на основе текущих GuestRFScore"""
+        from collections import Counter
+
+        # Считаем количество гостей в каждом сегменте
+        score_counts = (
+            GuestRFScore.objects
+            .filter(client__branch=self.branch, segment__isnull=False)
+            .values('segment_id')
+            .annotate(cnt=Count('id'))
+        )
+
+        counts_map = {item['segment_id']: item['cnt'] for item in score_counts}
+
+        # Создаём/обновляем снэпшот для каждого сегмента
+        for segment in self.segments:
+            guest_count = counts_map.get(segment.id, 0)
+            BranchSegmentSnapshot.objects.update_or_create(
+                branch=self.branch,
+                segment=segment,
+                date=snapshot_date,
+                defaults={'guests_count': guest_count}
+            )
+
     def find_segment_by_ranges(self, days, count):
         """Ищет сегмент на основе числовых диапазонов в БД"""
         # Оптимизация: сегменты уже загружены в __init__
@@ -579,7 +606,7 @@ class RFGuestService:
         ).select_related(
             'client__client'
         ).annotate(
-            last_visit_date=Max('client__client_attempt__created_on')
+            last_visit_date=Max('client__game_attempts__created_at')
         ).order_by('-calculated_at')
 
         return {

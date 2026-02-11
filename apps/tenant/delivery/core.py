@@ -13,7 +13,7 @@ class DeliveryRFService:
     """Сервис для RFM-аналитики доставки"""
 
     @staticmethod
-    def get_matrix_data():
+    def get_matrix_data(branch):
         """
         Подготавливает данные для RF-матрицы на основе активаций доставки.
         Frequency = количество активаций QR-кодов
@@ -21,9 +21,10 @@ class DeliveryRFService:
         """
         now = timezone.now()
         
-        # Получаем всех клиентов с активациями
+        # Получаем всех клиентов с активациями для конкретного филиала
         clients_with_activations = Delivery.objects.filter(
-            activated_by__isnull=False
+            activated_by__isnull=False,
+            branch=branch
         ).values('activated_by').annotate(
             frequency=Count('id'),
             last_activation=Max('created_at')
@@ -91,7 +92,7 @@ class DeliveryRFService:
         
         return {
             'segments': segments_with_counts,
-            'total_activations': Delivery.objects.filter(activated_by__isnull=False).count(),
+            'total_activations': Delivery.objects.filter(activated_by__isnull=False, branch=branch).count(),
             'unique_clients': clients_with_activations.count(),
             'last_update': now,
             'kpi': {
@@ -129,7 +130,7 @@ class DeliveryRFService:
         return ranges
 
     @staticmethod
-    def get_migration_stats(days=30, segment_code=None):
+    def get_migration_stats(branch, days=30, segment_code=None):
         """
         Подсчёт миграций клиентов между сегментами.
         Упрощённая версия - показывает только текущее распределение.
@@ -137,9 +138,10 @@ class DeliveryRFService:
         now = timezone.now()
         start_date = now - timedelta(days=days)
         
-        # Получаем активации за период
+        # Получаем активации за период для конкретного филиала
         activations = Delivery.objects.filter(
             activated_by__isnull=False,
+            branch=branch,
             created_at__gte=start_date
         ).values('activated_by').annotate(
             count=Count('id')
