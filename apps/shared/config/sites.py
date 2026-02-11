@@ -93,6 +93,9 @@ class TenantAdminSite(admin.AdminSite):
         extra_context['today'] = today
         extra_context['branch_codes'] = branch_codes
         return super().index(request, extra_context=extra_context)
+    
+    class Media:
+        js = ('admin/js/admin_sidebar_fix.js',)
 
 
 
