@@ -4,7 +4,7 @@ from django.http import Http404
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Count, F
+from django.db.models import Count, F, Q
 from datetime import timedelta
 
 from rest_framework.views import APIView
@@ -40,102 +40,117 @@ class BaseAdminStatsView(LoginRequiredMixin, UserPassesTestMixin):
         return context
 
 
-class StatisticsView(BaseAdminStatsView, TemplateView):
+class PeriodMixin:
+    """
+    Миксин, читающий GET-параметр ?period= и добавляющий
+    в контекст resolved-диапазон + список вариантов для UI.
+    """
+
+    def get_period_context(self):
+        period_code = self.request.GET.get('period', GeneralStatsService.DEFAULT_PERIOD)
+        date_from, date_to, period_code = GeneralStatsService.resolve_period(period_code)
+        return {
+            'period_code': period_code,
+            'date_from': date_from,
+            'date_to': date_to,
+            'period_choices': GeneralStatsService.PERIOD_CHOICES,
+        }
+
+
+class StatisticsView(PeriodMixin, BaseAdminStatsView, TemplateView):
     template_name = "general/statistics.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Получаем статистику через сервис
-        # Важно: ClientBranch.objects.all() внутри тенанта вернет данные только этого тенанта
-        context["stats"] = GeneralStatsService.get_dashboard_stats()
+
+        period_ctx = self.get_period_context()
+        context.update(period_ctx)
+
+        # Получаем статистику за выбранный период
+        context["stats"] = GeneralStatsService.get_dashboard_stats(
+            period_code=period_ctx['period_code']
+        )
         return context
 
 
-class StatisticsDetailView(BaseAdminStatsView, TemplateView):
+class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
     template_name = 'general/statistics_detail.html'
 
     def get_context_data(self, stat_name, **kwargs):
         context = super().get_context_data(**kwargs)
-        
+
+        period_ctx = self.get_period_context()
+        context.update(period_ctx)
+
+        date_from = period_ctx['date_from']
+
         # Базовый QuerySet
         qs = ClientBranch.objects.all()
-        month_ago = timezone.now() - timedelta(days=30)
+        if date_from:
+            period_qs = qs.filter(created_at__gte=date_from)
+        else:
+            period_qs = qs
 
-        # --- ПОДГОТОВКА СЛОЖНЫХ ФИЛЬТРОВ ---
-
-        # 1. Вернулись 2-й раз (получаем ID клиентов, у которых > 1 попытки)
-        repeat_client_ids = ClientAttempt.objects.values('client')\
-            .annotate(attempt_count=Count('id'))\
-            .filter(attempt_count__gte=2)\
-            .values_list('client', flat=True)
-
-        # 2. День рождения (скан в ДР)
-        # Находим попытки, где дата создания совпадает с ДР клиента
-        birthday_attempt_ids = ClientAttempt.objects.filter(
-            client__birth_date__isnull=False, # client -> ClientBranch -> User(client) -> birth_date
-            created_at__day=F('client__birth_date__day'),
-            created_at__month=F('client__birth_date__month')
-        ).values_list('client', flat=True)
-
+        # --- ПОДГОТОВКА СЛОЖНЫХ ФИЛЬТРОВ (ленивые — считаем только нужный) ---
 
         # --- КАРТА СТАТИСТИКИ (Mapping) ---
         title_map = {
-            # 1. Всего клиентов
+            # 1. Всего клиентов (не зависит от периода)
             "total_clients": (
                 'Общее количество оцифрованных гостей', 
                 qs
             ),
 
-            # 2. Новые за месяц
+            # 2. Новые за период
             "total_clients_last_month": (
-                'Новые за месяц', 
-                qs.filter(created_at__gte=month_ago)
+                'Новые за период', 
+                period_qs
             ),
 
             # 3. Получили суперприз (GAME)
             "new_clients_received_super_prize": (
                 'Выиграли суперприз', 
-                qs.filter(
+                period_qs.filter(
                     is_joined_community=True,
                     superprizes__acquired_from='GAME'
                 )
             ),
 
             # 4. Вернулись 2-й раз
-            "clients_returned_second_time": (
-                'Вернулись повторно', 
-                qs.filter(id__in=repeat_client_ids)
-            ),
+            "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from),
 
             # 5. Скан в День Рождения
-            "clients_birthday_qr": (
-                'Сканировали в День Рождения',
-                qs.filter(id__in=birthday_attempt_ids)
-            ),
+            "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from),
 
             # 6. Купили подарки (Трата коинов)
             "clients_bought_prizes": (
                 'Купили подарки', 
-                qs.filter(transactions__type="EXPENSE")
+                self._get_bought_prizes_qs(qs, date_from)
             ),
 
             # 7. Выложили сторис
             "clients_posted_story": (
                 'Опубликовали истории', 
-                qs.filter(is_story_uploaded=True)
+                period_qs.filter(is_story_uploaded=True)
             ),
 
             # 8. Рефералы
             "clients_from_referral": (
                 'Перешли по реферальной ссылке', 
-                qs.filter(invited_by__isnull=False)
+                period_qs.filter(invited_by__isnull=False)
             ),
         }
 
-        if stat_name in title_map:
-            title, filtered_qs = title_map[stat_name]
+        entry = title_map.get(stat_name)
+
+        if entry is not None:
+            if callable(entry):
+                # Ленивые тяжёлые запросы
+                title, filtered_qs = entry()
+            else:
+                title, filtered_qs = entry
+
             context['stat'] = title
-            # distinct() важен, чтобы не дублировать клиентов в списке
             context["clients"] = filtered_qs.distinct()
         
         context["stat_name"] = stat_name
@@ -145,6 +160,39 @@ class StatisticsDetailView(BaseAdminStatsView, TemplateView):
             {"title": context.get('stat', stat_name), "url": ""},
         ]
         return context
+
+    # ── Вспомогательные методы (вынесены, чтобы не считать всё подряд) ──
+
+    @staticmethod
+    def _get_returned_clients(qs, date_from):
+        attempt_filters = {}
+        if date_from:
+            attempt_filters['created_at__gte'] = date_from
+        repeat_client_ids = ClientAttempt.objects.filter(
+            **attempt_filters
+        ).values('client').annotate(
+            attempt_count=Count('id')
+        ).filter(attempt_count__gte=2).values_list('client', flat=True)
+        return ('Вернулись повторно', qs.filter(id__in=repeat_client_ids))
+
+    @staticmethod
+    def _get_birthday_clients(qs, date_from):
+        filters = Q(
+            client__birth_date__isnull=False,
+            created_at__day=F('client__birth_date__day'),
+            created_at__month=F('client__birth_date__month'),
+        )
+        if date_from:
+            filters &= Q(created_at__gte=date_from)
+        birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
+        return ('Сканировали в День Рождения', qs.filter(id__in=birthday_attempt_ids))
+
+    @staticmethod
+    def _get_bought_prizes_qs(qs, date_from):
+        expense_filter = Q(transactions__type="EXPENSE")
+        if date_from:
+            expense_filter &= Q(transactions__created_at__gte=date_from)
+        return qs.filter(expense_filter)
 
 
 class AwayView(LoginRequiredMixin, View):
@@ -184,13 +232,11 @@ class RFAnalyticsDetailView(BaseAdminStatsView, DetailView):
         # 3. Настройки и примеры гостей
         settings_obj = RFSettings.objects.filter(branch=branch).first()
         
-        # Пример "Идеальных" гостей для отображения
         top_guests = GuestRFScore.objects.filter(
             client__branch=branch, 
             segment__code='R3F3'
         ).select_related('client__client')[:10]
 
-        # Обновляем контекст
         context.update({
             'segments': matrix_data['segments'],
             'total_guests': matrix_data['total_guests'],
@@ -222,7 +268,6 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
         # 1. Валидация входных данных
         validator = MigrationFilterSerializer(data=self.request.GET)
         if not validator.is_valid():
-            # Если данные некорректны, используем дефолтные
             data = {'days': 30, 'segment': ''}
         else:
             data = validator.validated_data
@@ -244,18 +289,15 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
         all_segments = RFSegment.objects.all().order_by('-code')
 
         context.update({
-            # Sankey & Charts
             'sankey_data': stats['sankey_data'],
             'flow_stats': stats['flow_stats'],
             
-            # KPI
             'growth_count': stats['kpi']['growth'],
             'real_churn_count': stats['kpi']['real_churn'],
             'natural_cooling_count': stats['kpi']['natural_cooling'],
             'reactivation_count': stats['kpi']['reactivation'],
             'retention_rate': stats['kpi']['retention_rate'],
             
-            # Lists & Filters
             'recent_guests': recent_guests,
             'all_segments': all_segments,
             'days': data['days'],
@@ -311,7 +353,6 @@ class RFSettingsSaveView(APIView):
                 }, status=status.HTTP_200_OK)
                 
             except Exception as e:
-                # Логируем ошибку здесь
                 return Response({
                     'status': 'error', 
                     'message': f"Ошибка сохранения: {str(e)}"
@@ -362,7 +403,7 @@ class RFGetSegmentGuest(APIView):
                 'segment_emoji': segment.emoji,
                 'strategy': segment.strategy,
                 'count': result['count'],
-                'last_campaign': last_campaign_info,  # New: days since last campaign
+                'last_campaign': last_campaign_info,
                 'guests': guest_serializer.data,
             }, status=status.HTTP_200_OK)
 

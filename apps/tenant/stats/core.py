@@ -1,5 +1,6 @@
 import requests
 import json
+import logging
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
@@ -17,139 +18,191 @@ from apps.tenant.stats.models import (
     RFSettings, BranchSegmentSnapshot
 )
 
+logger = logging.getLogger(__name__)
+
+
 class GeneralStatsService:
     """Сервис для общей статистики (Dashboard)"""
-    
+
+    # ────────────────────────────────────────────
+    # Предустановленные периоды (код → дней назад)
+    # ────────────────────────────────────────────
+    PERIOD_CHOICES = {
+        'today':     ('Сегодня',       0),
+        '7d':        ('7 дней',        7),
+        '30d':       ('30 дней',       30),
+        '90d':       ('90 дней',       90),
+        '365d':      ('За год',        365),
+        'all':       ('За всё время',  None),
+    }
+    DEFAULT_PERIOD = '30d'
+
+    @classmethod
+    def resolve_period(cls, period_code: str):
+        """
+        Возвращает (date_from, date_to) по коду периода.
+        date_to всегда = now(), date_from = now() - N дней (или None для 'all').
+        """
+        if period_code not in cls.PERIOD_CHOICES:
+            period_code = cls.DEFAULT_PERIOD
+
+        _, days = cls.PERIOD_CHOICES[period_code]
+        date_to = now()
+
+        if days is None:
+            date_from = None           # без ограничения
+        elif days == 0:
+            date_from = date_to.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            date_from = date_to - timedelta(days=days)
+
+        return date_from, date_to, period_code
+
+    # ────────────────────────────────────────────
+    # Staff Engagement Index
+    # ────────────────────────────────────────────
     @staticmethod
-    def get_staff_engagement_index(base_qs=None):
+    def get_staff_engagement_index(date_from=None, date_to=None):
         """
-        Calculates Staff Engagement Index:
         (Games served by staff / Total games) * 100
+        Считает за указанный период; если date_from=None — за всё время.
         """
-        # We need to filter ClientAttempt, not ClientBranch
-        # Assuming base_qs is ClientBranch, we can get attempts through relation
-        
-        # Total attempts in the last 30 days
-        month_ago = now() - timedelta(days=30)
-        
-        total_attempts = ClientAttempt.objects.filter(
-            created_at__gte=month_ago
-        ).count()
-        
+        filters = {}
+        if date_from:
+            filters['created_at__gte'] = date_from
+        if date_to:
+            filters['created_at__lte'] = date_to
+
+        total_attempts = ClientAttempt.objects.filter(**filters).count()
         if total_attempts == 0:
             return 0
-            
+
         staff_attempts = ClientAttempt.objects.filter(
-            created_at__gte=month_ago,
-            served_by__isnull=False
+            served_by__isnull=False, **filters
         ).count()
-        
+
         return int((staff_attempts / total_attempts) * 100)
 
-    @staticmethod
-    def get_dashboard_stats(base_qs=None):
+    # ────────────────────────────────────────────
+    # Основной метод Dashboard
+    # ────────────────────────────────────────────
+    @classmethod
+    def get_dashboard_stats(cls, period_code: str = None):
         """
-        Собирает общую статистику.
-        :param base_qs: QuerySet ClientBranch (обычно отфильтрованный по тенанту)
-        """
-        if base_qs is None:
-            base_qs = ClientBranch.objects.all()
+        Собирает статистику за указанный период.
 
-        month_ago = now() - timedelta(days=30)
-        
-        # Предварительные агрегации для оптимизации
-        total_clients = base_qs.values("client").distinct().count()
-        last_month = base_qs.filter(created_at__gte=month_ago).values("client").distinct().count()
-        
-        # Сложные метрики выносим в отдельные методы или оставляем здесь если они специфичны
-        super_prize_new = ClientBranch.objects.filter(
+        :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
+        """
+        date_from, date_to, period_code = cls.resolve_period(
+            period_code or cls.DEFAULT_PERIOD
+        )
+
+        base_qs = ClientBranch.objects.all()
+
+        # ── Фильтр по периоду (created_at) ──
+        period_qs = base_qs
+        if date_from:
+            period_qs = base_qs.filter(created_at__gte=date_from)
+
+        # ── Базовые подсчёты ──
+        total_clients = base_qs.values("client").distinct().count()                # всегда «все»
+        total_clients_period = period_qs.values("client").distinct().count()        # за период
+
+        # FIX: использован period_qs вместо глобального ClientBranch.objects
+        super_prize_new = period_qs.filter(
             is_joined_community=True,
             superprizes__acquired_from='GAME'
         ).distinct().count()
 
-        # Вернулись второй раз (Оптимизированный запрос через exists или count в аннотации)
-        # Логика: ClientAttempt ссылается на ClientBranch как 'client'
-        clients_returned = ClientAttempt.objects.values("client").annotate(
+        # Вернулись второй раз
+        attempt_filters = {}
+        if date_from:
+            attempt_filters['created_at__gte'] = date_from
+        clients_returned = ClientAttempt.objects.filter(
+            **attempt_filters
+        ).values("client").annotate(
             cnt=Count("id")
         ).filter(cnt__gte=2).count()
 
-        # День рождения (QR сканирован в ДР)
-        # Replacing this with "Sent Greetings" as per requirements
-        # But keeping logic if they want both? The req says "Metric instead of 'birthdays', sent greetings"
-        # We will fetch Sent Greetings count from MessageLog
-        
-        # bought_prizes logic...
-        bought_prizes = base_qs.filter(transactions__type="EXPENSE").values("client").distinct().count() # Fixed type string
-        posted_story = base_qs.filter(is_story_uploaded=True).values("client").distinct().count()
-        referral = base_qs.filter(invited_by__isnull=False).values("client").distinct().count()
-        
-        # New Metrics
-        staff_index = GeneralStatsService.get_staff_engagement_index(base_qs)
-        
-        # Sent Birthday Greetings (Last 30 days)
-        # We look for MessageLogs linked to campaigns with title containing "День Рождения"
+        # Купили подарки
+        expense_filter = Q(transactions__type="EXPENSE")
+        if date_from:
+            expense_filter &= Q(transactions__created_at__gte=date_from)
+        bought_prizes = base_qs.filter(expense_filter).values("client").distinct().count()
+
+        # Выложили сторис
+        posted_story = period_qs.filter(is_story_uploaded=True).values("client").distinct().count()
+
+        # Рефералы
+        referral = period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
+
+        # Staff Engagement Index
+        staff_index = cls.get_staff_engagement_index(date_from, date_to)
+
+        # ── Метрики рассылок ──
+        msg_filters = Q(status='sent')
+        if date_from:
+            msg_filters &= Q(sent_at__gte=date_from)
+
         sent_greetings = MessageLog.objects.filter(
+            msg_filters,
             campaign__title__icontains="День Рождения",
-            status='sent',
-            sent_at__gte=month_ago
         ).count()
 
-        # Activated Birthday Prizes (Last 30 days)
-        # Count SuperPrizes with source BIRTHDAY that were activated
-        from apps.tenant.inventory.models import SuperPrize
-        activated_birthday_prizes = SuperPrize.objects.filter(
-            acquired_from='BIRTHDAY',
-            activated_at__isnull=False,
-            activated_at__gte=month_ago
-        ).count()
+        # Activated Birthday Prizes
+        try:
+            from apps.tenant.inventory.models import SuperPrize
+            bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
+            if date_from:
+                bp_filters &= Q(activated_at__gte=date_from)
+            activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).count()
+        except Exception as e:
+            logger.warning("Could not fetch birthday prizes: %s", e)
+            activated_birthday_prizes = 0
 
-        # VK Subscribers (Group + Mailing)
-        from apps.tenant.senler.services import VKService
-        vk_service = VKService()
-        group_subscribers = vk_service.get_group_members_count()
-        mailing_subscribers = vk_service.get_mailing_subscribers_count()
-
-        # Scan Index: QR scans today / IIKO guests today * 100
-        # Shows how many IIKO guests scanned QR and used our app
-        from apps.tenant.stats.iiko import IIKOService
-        from apps.tenant.branch.models import ClientBranchVisit
-        from django.utils import timezone
-        
-        iiko_service = IIKOService()
-        
-        # QR scans today
-        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        qr_scans_today = ClientBranchVisit.objects.filter(
-            visited_at__gte=today_start
-        ).count()
-        
-        # IIKO guests today
-        iiko_guests_today = iiko_service.get_total_guests_today()
-        
-        # Calculate scan index
-        scan_index = iiko_service.calculate_scan_index(qr_scans_today, iiko_guests_today)
-        
-        # Open Rate: % of sent messages that were read
-        total_sent = MessageLog.objects.filter(
-            status='sent',
-            sent_at__gte=month_ago
-        ).count()
-        
-        total_read = MessageLog.objects.filter(
-            status='sent',
-            is_read=True,
-            sent_at__gte=month_ago
-        ).count()
-        
+        # Open Rate
+        total_sent = MessageLog.objects.filter(msg_filters).count()
+        total_read = MessageLog.objects.filter(msg_filters, is_read=True).count()
         open_rate = int((total_read / total_sent * 100)) if total_sent > 0 else 0
+
+        # ── VK подписчики (не зависят от периода) ──
+        group_subscribers = 0
+        mailing_subscribers = 0
+        try:
+            from apps.tenant.senler.services import VKService
+            vk_service = VKService()
+            group_subscribers = vk_service.get_group_members_count()
+            mailing_subscribers = vk_service.get_mailing_subscribers_count()
+        except Exception as e:
+            logger.warning("VK service error: %s", e)
+
+        # ── IIKO / Scan Index (только «сегодня», не зависит от периода) ──
+        qr_scans_today = 0
+        iiko_guests_today = 0
+        scan_index = 0.0
+        try:
+            from apps.tenant.stats.iiko import IIKOService
+            from apps.tenant.branch.models import ClientBranchVisit
+
+            iiko_service = IIKOService()
+            today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            qr_scans_today = ClientBranchVisit.objects.filter(
+                visited_at__gte=today_start
+            ).count()
+            iiko_guests_today = iiko_service.get_total_guests_today()
+            scan_index = iiko_service.calculate_scan_index(qr_scans_today, iiko_guests_today)
+        except Exception as e:
+            logger.warning("IIKO service error: %s", e)
 
         return {
             "total_clients": total_clients,
-            "total_clients_last_month": last_month,
+            "total_clients_period": total_clients_period,
+            # Обратная совместимость (шаблон detail ожидает old key)
+            "total_clients_last_month": total_clients_period,
             "new_clients_received_super_prize": super_prize_new,
             "clients_returned_second_time": clients_returned,
-            "sent_greetings": sent_greetings,  # Renamed from sent_birthday_greetings for template
-            "sent_birthday_greetings": sent_greetings,  # Keep for backwards compat
+            "sent_greetings": sent_greetings,
+            "sent_birthday_greetings": sent_greetings,
             "activated_birthday_prizes": activated_birthday_prizes,
             "clients_bought_prizes": bought_prizes,
             "clients_posted_story": posted_story,
@@ -160,7 +213,7 @@ class GeneralStatsService:
             "qr_scans_today": qr_scans_today,
             "iiko_guests_today": iiko_guests_today,
             "scan_index": scan_index,
-            "open_rate": open_rate,  # New: % messages read
+            "open_rate": open_rate,
         }
 
 class RFAnalyticsService:
@@ -197,13 +250,11 @@ class RFAnalyticsService:
 
         for snap in snapshots:
             seg = snap.segment
-            # Добавляем атрибут guests_count прямо к объекту сегмента для шаблона
-            # (или лучше использовать словарь, но для совместимости с шаблоном оставим так)
             seg.guests_count = snap.guests_count 
             total_guests += snap.guests_count
             segments_data.append(seg)
 
-            # KPI logic based on codes (Hardcoded business rules)
+            # KPI logic based on codes
             if seg.code.endswith('F3'):
                 vip_count += snap.guests_count
             if seg.code.startswith('R1'):
@@ -212,15 +263,13 @@ class RFAnalyticsService:
                 lost_count += snap.guests_count
 
         # 3. Сортировка сегментов
-        # Используем надежную сортировку: парсим R и F
         def safe_sort_key(seg):
             try:
-                # Ожидаемый формат RxFy
                 r_part = seg.code.split('F')[0].replace('R', '')
                 f_part = seg.code.split('F')[1]
-                return (-int(r_part), int(f_part)) # R убывает (3->0), F возрастает (1->3)
+                return (-int(r_part), int(f_part))
             except (IndexError, ValueError):
-                return (0, 0) # Fallback
+                return (0, 0)
 
         segments_data.sort(key=safe_sort_key)
 
@@ -238,7 +287,6 @@ class RFAnalyticsService:
     @staticmethod
     def get_segment_ranges(segments):
         """Извлекает примеры сегментов для заголовков таблицы (F1, F2... R1, R2...)"""
-        # Это вспомогательная функция для отображения "от 0 до 30 дней" в заголовках
         ranges = {
             'f1': next((s for s in segments if s.code.endswith('F1')), None),
             'f2': next((s for s in segments if s.code.endswith('F2')), None),
@@ -257,16 +305,13 @@ class RFCalculator:
         self.segments = list(RFSegment.objects.all())
 
     def run_analysis(self):
-        # Используем localdate() для корректного сравнения календарных дней
         today_dt = timezone.now()
         today_date = today_dt.date() 
         
         period_start = today_dt - timezone.timedelta(days=self.settings.analysis_period)
 
         guests = ClientBranch.objects.filter(branch=self.branch).annotate(
-            # Дату последнего визита ищем за всё время
-            last_attempt=Max('game_attempts__created_at'), # FIX: client_attempt -> game_attempts (related_name check)
-            # Количество визитов считаем за период
+            last_attempt=Max('game_attempts__created_at'),
             attempt_count=Count('game_attempts', filter=Q(game_attempts__created_at__gte=period_start))
         )
         
@@ -293,7 +338,6 @@ class RFCalculator:
             score = existing_scores.get(cb.id)
             
             if not score:
-                # Create new
                 to_create.append(GuestRFScore(
                     client=cb,
                     segment=segment,
@@ -303,10 +347,8 @@ class RFCalculator:
                     f_score=int(segment.code[3])
                 ))
             else:
-                # Update existing
                 is_changed = False
                 
-                # Check for segment change (Migration)
                 if score.segment_id != segment.id:
                     migration_logs.append(RFMigrationLog(
                         client=cb,
@@ -318,7 +360,6 @@ class RFCalculator:
                     score.f_score = int(segment.code[3])
                     is_changed = True
                 
-                # Check for metric changes
                 if score.recency_days != days_since or score.frequency != cb.attempt_count:
                     score.recency_days = days_since
                     score.frequency = cb.attempt_count
@@ -341,14 +382,10 @@ class RFCalculator:
         if migration_logs:
             RFMigrationLog.objects.bulk_create(migration_logs, batch_size=500)
 
-        # Обновляем снэпшот сегментов для филиала
         self._update_segment_snapshot(today_date)
 
     def _update_segment_snapshot(self, snapshot_date):
         """Создаёт/обновляет BranchSegmentSnapshot на основе текущих GuestRFScore"""
-        from collections import Counter
-
-        # Считаем количество гостей в каждом сегменте
         score_counts = (
             GuestRFScore.objects
             .filter(client__branch=self.branch, segment__isnull=False)
@@ -358,7 +395,6 @@ class RFCalculator:
 
         counts_map = {item['segment_id']: item['cnt'] for item in score_counts}
 
-        # Создаём/обновляем снэпшот для каждого сегмента
         for segment in self.segments:
             guest_count = counts_map.get(segment.id, 0)
             BranchSegmentSnapshot.objects.update_or_create(
@@ -370,7 +406,6 @@ class RFCalculator:
 
     def find_segment_by_ranges(self, days, count):
         """Ищет сегмент на основе числовых диапазонов в БД"""
-        # Оптимизация: сегменты уже загружены в __init__
         for seg in self.segments:
             if (seg.recency_min <= days <= seg.recency_max) and \
                (seg.frequency_min <= count <= seg.frequency_max):
@@ -382,10 +417,6 @@ class RFManagementService:
 
     @staticmethod
     def run_recalculation(branch_id=None):
-        """
-        Запускает пересчет RF-метрик.
-        Если branch_id передан - только для одного, иначе для всех.
-        """
         if branch_id:
             branches = Branch.objects.filter(id=branch_id)
         else:
@@ -399,7 +430,6 @@ class RFManagementService:
 
         for branch in branches:
             try:
-                # Предполагаем, что RFCalculator.run_analysis() существует
                 calculator = RFCalculator(branch)
                 calculator.run_analysis()
                 processed_count += 1
@@ -415,21 +445,15 @@ class RFManagementService:
 
     @staticmethod
     def update_settings(branch_id, settings_data):
-        """
-        Обновляет настройки RF: период анализа и пороги сегментов.
-        """
         with transaction.atomic():
             branch = get_object_or_404(Branch, id=branch_id)
             
-            # 1. Обновляем настройки периода
             period = settings_data.get('analysis_period', 365)
             RFSettings.objects.update_or_create(
                 branch=branch, 
                 defaults={'analysis_period': period}
             )
 
-            # 2. Обновляем пороги сегментов
-            # ВАЖНО: Это меняет глобальные настройки сегментов для схемы тенанта
             r3 = settings_data.get('r3_max')
             r2 = settings_data.get('r2_max')
             r1 = settings_data.get('r1_max')
@@ -443,7 +467,6 @@ class RFManagementService:
                 is_changed = False
                 code = seg.code
                 
-                # Логика Recency
                 if code.startswith('R3'):
                     seg.recency_min, seg.recency_max = 0, r3
                     is_changed = True
@@ -457,7 +480,6 @@ class RFManagementService:
                     seg.recency_min, seg.recency_max = r1 + 1, 9999
                     is_changed = True
 
-                # Логика Frequency
                 if code.endswith('F1'):
                     seg.frequency_min, seg.frequency_max = 1, f1
                     is_changed = True
@@ -484,45 +506,32 @@ class RFMigrationService:
 
     @staticmethod
     def get_migration_stats(branch, days=30, segment_code=None):
-        """
-        Расчет Sankey диаграммы и показателей Growth/Churn
-        """
         start_date = now() - timedelta(days=days)
         
-        # Базовый QuerySet
         logs_qs = RFMigrationLog.objects.filter(
             client__branch=branch,
             migrated_at__gte=start_date
         ).select_related('from_segment', 'to_segment')
 
-        # Фильтрация по конкретному сегменту (Вход или Выход)
         if segment_code:
             logs_qs = logs_qs.filter(
                 Q(from_segment__code=segment_code) | 
                 Q(to_segment__code=segment_code)
             )
 
-        # Агрегация потоков для Sankey
         flow_stats = logs_qs.values(
             'from_segment__name', 'from_segment__emoji', 'from_segment__code',
             'to_segment__name', 'to_segment__emoji', 'to_segment__code'
         ).annotate(count=Count('id')).order_by('-count')
 
-        # Формирование данных для диаграммы Sankey
         sankey_data = []
         for f in flow_stats:
             source = f"{f.get('from_segment__emoji', '')} {f.get('from_segment__name', 'Unknown')}"
             target = f"{f.get('to_segment__emoji', '')} {f.get('to_segment__name', 'Unknown')}"
             sankey_data.append([source, target, f['count']])
 
-        # Расчет KPI
-        # ВАЖНО: Сравнение строк кодов работает корректно только если формат фиксирован (R1 < R3).
-        # Если появятся R10, логику нужно менять на парсинг чисел.
         growth = logs_qs.filter(to_segment__code__gt=F('from_segment__code')).count()
-        
-        # Тех кто "упал"
         drops_qs = logs_qs.filter(to_segment__code__lt=F('from_segment__code'))
-        
         real_churn = logs_qs.filter(to_segment__code__startswith='R0').count()
         natural_cooling = drops_qs.exclude(to_segment__code__startswith='R0').count()
         
@@ -531,7 +540,6 @@ class RFMigrationService:
             to_segment__code__gt='R0'
         ).count()
 
-        # Retention Rate Calculation
         total_negative = real_churn + natural_cooling
         denominator = growth + total_negative
         retention_rate = int((growth / denominator * 100)) if denominator > 0 else 0
@@ -550,10 +558,8 @@ class RFMigrationService:
 
     @staticmethod
     def get_recent_migrated_guests(branch, days=30, limit=9):
-        """Получает список недавних гостей с их историей"""
         start_date = now() - timedelta(days=days)
         
-        # Получаем уникальные ID последних мигрировавших
         unique_ids = list(RFMigrationLog.objects.filter(
             client__branch=branch,
             migrated_at__gte=start_date
@@ -562,29 +568,26 @@ class RFMigrationService:
         if not unique_ids:
             return []
 
-        # Загружаем текущие скоры
         scores = GuestRFScore.objects.filter(
             client_id__in=unique_ids
         ).select_related('client__client', 'segment')
 
-        # Загружаем историю (оптимизация: загружаем сразу для всех и мапим в Python)
         all_logs = RFMigrationLog.objects.filter(
             client_id__in=unique_ids
         ).select_related('from_segment', 'to_segment').order_by('-migrated_at')
 
-        # Группировка логов по клиенту
         logs_by_client = {}
         for log in all_logs:
             if log.client_id not in logs_by_client:
                 logs_by_client[log.client_id] = []
-            if len(logs_by_client[log.client_id]) < 3: # Только последние 3
+            if len(logs_by_client[log.client_id]) < 3:
                 logs_by_client[log.client_id].append(log)
 
         result = []
         for s in scores:
             result.append({
-                'info': s.client, # ClientBranch
-                'current': s,     # GuestRFScore
+                'info': s.client,
+                'current': s,
                 'history': logs_by_client.get(s.client_id, [])
             })
         
@@ -598,8 +601,6 @@ class RFGuestService:
         branch = get_object_or_404(Branch, id=branch_id)
         segment = get_object_or_404(RFSegment, code=segment_code)
 
-        # Оптимизированный запрос с аннотацией последней даты
-        # Мы избегаем цикла запросов к client_attempt
         guests = GuestRFScore.objects.filter(
             client__branch=branch, 
             segment=segment
@@ -639,6 +640,6 @@ class VKIntegrationService:
                 return f"https://vk.com/{profile_name}"
                 
         except (requests.RequestException, ValueError, IndexError):
-            pass # Логирование ошибки можно добавить здесь
+            pass
             
         return None

@@ -45,30 +45,28 @@
         background-color: #fcfdfd !important;
     }
 
-    /* 2. Стили индикаторов (Status Badges) для светлой темы */
+    /* 2. Status Badges */
     .status-badge {
         padding: 4px 12px;
-        border-radius: 50px; /* Сделаем более закругленными */
+        border-radius: 50px;
         font-size: 0.72rem;
         font-weight: 600;
         display: inline-flex;
         align-items: center;
         gap: 6px;
     }
-    /* Зеленый: Да */
     .status-true { 
         background: #e8f5e9; 
         color: #2e7d32; 
         border: 1px solid #c8e6c9; 
     }
-    /* Красный: Нет */
     .status-false { 
         background: #ffebee; 
         color: #c62828; 
         border: 1px solid #ffcdd2; 
     }
 
-    /* 3. Кнопка VK (Светлая версия) */
+    /* 3. Кнопка VK */
     .btn-vk {
         background: #f0f4ff;
         border: 1px solid #d0d7f1;
@@ -96,7 +94,7 @@
     }
 
     .breadcrumbs a {
-        color: #28a745; /* Ваш основной зеленый цвет */
+        color: #28a745;
         text-decoration: none;
     }
 
@@ -107,6 +105,65 @@
     /* Дополнительные утилиты */
     .text-main-black { color: #212529 !important; }
     .text-main-muted { color: #888888 !important; }
+
+    /* ═══ Fix: Bootstrap vs Django Admin Sidebar ═══ */
+    #container, #header, #nav-sidebar,
+    #container *, #header *, #nav-sidebar * {
+        box-sizing: content-box !important;
+    }
+    #nav-sidebar {
+        position: sticky !important;
+        top: 0 !important;
+        max-height: 100vh !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        width: 275px !important;
+        flex-shrink: 0 !important;
+    }
+    #nav-sidebar ul {
+        padding-left: 0;
+        margin-bottom: 0;
+        list-style: none;
+    }
+    #nav-sidebar li {
+        list-style: none;
+    }
+    #nav-sidebar, #nav-sidebar * {
+        scroll-behavior: auto !important;
+    }
+    #content, #content * {
+        box-sizing: border-box !important;
+    }
+
+    /* ─── Period Selector (compact) ─── */
+    .period-selector-sm {
+        display: inline-flex;
+        gap: 0;
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .period-selector-sm a {
+        padding: 5px 12px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #555;
+        text-decoration: none;
+        border-right: 1px solid #eee;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .period-selector-sm a:last-child { border-right: none; }
+    .period-selector-sm a:hover {
+        background: #f0faf1;
+        color: #28a745;
+    }
+    .period-selector-sm a.active {
+        background: #28a745;
+        color: #fff;
+    }
 </style>
 {% endblock %}
 
@@ -114,7 +171,7 @@
 <div class="breadcrumbs">
     {% for crumb in breadcrumbs %}
         {% if crumb.url %}
-            <a href="{{ crumb.url }}">{{ crumb.title }}</a>
+            <a href="{{ crumb.url }}{% if period_code %}?period={{ period_code }}{% endif %}">{{ crumb.title }}</a>
         {% else %}
             <span style="font-weight: 600; color: #333;">{{ crumb.title }}</span>
         {% endif %}
@@ -126,15 +183,26 @@
 {% block content %}
 <div class="container-fluid p-4" style="min-height: 100vh;">
     
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
             <h1 class="h4 fw-bold text-main-black mb-1">
                 <span style="color: #28a745;">#</span> {{ stat }}
             </h1>
             <p class="text-main-muted small mb-0">Детальный список клиентов по выбранному показателю</p>
         </div>
-        <div class="badge bg-white border text-dark py-2 px-3 shadow-sm" style="border-radius: 8px;">
-            Всего записей: <span class="fw-bold" style="color: #28a745;">{{ clients|length }}</span>
+
+        <div class="d-flex align-items-center gap-3">
+            {# Период #}
+            <div class="period-selector-sm">
+                {% for code, meta in period_choices.items %}
+                    <a href="?period={{ code }}"
+                       class="{% if code == period_code %}active{% endif %}">{{ meta.0 }}</a>
+                {% endfor %}
+            </div>
+
+            <div class="badge bg-white border text-dark py-2 px-3 shadow-sm" style="border-radius: 8px;">
+                Всего записей: <span class="fw-bold" style="color: #28a745;">{{ clients|length }}</span>
+            </div>
         </div>
     </div>
 
@@ -145,7 +213,7 @@
                     <tr>
                         <th>Клиент</th>
                         <th>Дата рождения</th>
-                        <th class="text-center">Сторис</th>
+                        <th class="text-center">Стория</th>
                         <th class="text-center">Сообщество</th>
                         <th class="text-center">Инвайт</th>
                         <th class="text-end">Действие</th>

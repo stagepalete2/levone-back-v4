@@ -34,7 +34,6 @@
     .stat-card:hover {
         transform: translateY(-3px);
         border-color: #28a745 !important;
-        /* Зеленый акцент как в вашей админке */
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1) !important;
         background: #f8fff9;
     }
@@ -42,7 +41,6 @@
     /* 3. Typography - Dark text for Light BG */
     .stat-card h3 {
         color: #666;
-        /* Неяркий текст для заголовков карточек */
         font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -55,7 +53,6 @@
         font-size: 2.2rem;
         font-weight: 800;
         color: #212529;
-        /* Почти черный */
         line-height: 1;
     }
 
@@ -95,10 +92,31 @@
         color: #777 !important;
     }
 
-    /* Fix for Admin Sidebar when Bootstrap is loaded */
-    #nav-sidebar, #nav-sidebar * {
+    /* ═══ Fix: Bootstrap vs Django Admin Sidebar ═══
+       Bootstrap's global *, *::before, *::after { box-sizing: border-box }
+       breaks Django's sticky sidebar and causes scroll-jump.
+       We isolate the entire admin chrome from Bootstrap's resets.
+    */
+
+    /* 1. Restore box-sizing for admin shell */
+    #container, #header, #nav-sidebar,
+    #container *, #header *, #nav-sidebar * {
         box-sizing: content-box !important;
     }
+
+    /* 2. Keep sidebar sticky + scrollable (Django defaults) */
+    #nav-sidebar {
+        position: sticky !important;
+        top: 0 !important;
+        max-height: 100vh !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        /* Prevent Bootstrap from collapsing width */
+        width: 275px !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* 3. Undo Bootstrap list resets inside sidebar */
     #nav-sidebar ul {
         padding-left: 0;
         margin-bottom: 0;
@@ -107,8 +125,48 @@
     #nav-sidebar li {
         list-style: none;
     }
-    #header, #header * {
-         box-sizing: content-box !important;
+
+    /* 4. Prevent Bootstrap's scroll-behavior:smooth on the sidebar
+       (this is the main cause of "jumps to top" on navigation) */
+    #nav-sidebar, #nav-sidebar * {
+        scroll-behavior: auto !important;
+    }
+
+    /* 5. Fix: main content area should use border-box (Bootstrap) */
+    #content, #content * {
+        box-sizing: border-box !important;
+    }
+
+    /* ─── Period Selector ─── */
+    .period-selector {
+        display: inline-flex;
+        gap: 0;
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .period-selector a {
+        padding: 8px 16px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #555;
+        text-decoration: none;
+        border-right: 1px solid #e8e8e8;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .period-selector a:last-child {
+        border-right: none;
+    }
+    .period-selector a:hover {
+        background: #f0faf1;
+        color: #28a745;
+    }
+    .period-selector a.active {
+        background: #28a745;
+        color: #fff;
     }
 </style>
 {% endblock %}
@@ -116,36 +174,54 @@
 {% block content %}
 <div class="p-4" style="background-color: #f4f7f6; min-height: 100vh;">
 
-    <h1 class="section-title">
-        <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">📊</span>
-        Статистика — {{ tenant_name|default:"Все клиенты" }}
-    </h1>
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-3">
+        <h1 class="section-title mb-0">
+            <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">📊</span>
+            Статистика — {{ tenant_name|default:"Все клиенты" }}
+        </h1>
+
+        {# ── Переключатель периода ── #}
+        <div class="period-selector">
+            {% for code, meta in period_choices.items %}
+                <a href="?period={{ code }}"
+                   class="{% if code == period_code %}active{% endif %}">
+                    {{ meta.0 }}
+                </a>
+            {% endfor %}
+        </div>
+    </div>
 
     <p class='text-custom-dark fs-5 mb-1'>
         На данной странице представлена сводная статистика по всем ресторанам.
     </p>
     <p class='text-custom-muted fs-6 mb-4'>
         Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RFM-статистику</strong>.
+        {% if period_code != 'all' %}
+            <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
+                <i class="bi bi-calendar3"></i> {{ period_choices|dictsort:period_code }}
+                {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+            </span>
+        {% endif %}
     </p>
 
     <div class="dashboard-grid">
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?period={{ period_code }}" class="stat-card">
             <h3>Оцифрованные гости</h3>
             <div class="metric">{{ stats.total_clients|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}" class="stat-card">
-            <h3>За месяц</h3>
-            <div class="metric" style="color: #28a745;">{{ stats.total_clients_last_month|default:0 }}</div>
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?period={{ period_code }}" class="stat-card">
+            <h3>Новые за период</h3>
+            <div class="metric" style="color: #28a745;">{{ stats.total_clients_period|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?period={{ period_code }}" class="stat-card">
             <h3>Новые + 1-й подарок</h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?period={{ period_code }}" class="stat-card">
             <h3>Вернулись 2-й раз</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
@@ -166,17 +242,17 @@
             <small class="text-muted">Прочитано / Доставлено</small>
         </div>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}" class='stat-card'>
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?period={{ period_code }}" class='stat-card'>
             <h3>Купили подарки</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?period={{ period_code }}" class="stat-card">
             <h3>Опубликовали истории</h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?period={{ period_code }}" class="stat-card">
             <h3>Из историй</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
@@ -255,7 +331,7 @@
     };
 
     const total = {{ stats.total_clients|default:0 }};
-    const emptyColor = '#f0f0f0'; // Светло-серый для пустых областей
+    const emptyColor = '#f0f0f0';
 
     // Referral Chart
     new Chart(document.getElementById('referralChart'), {
@@ -263,11 +339,11 @@
         data: {
             labels: ['Реферал', 'Прямые'],
             datasets: [{
-                data: [{{ stats.clients_from_referral |default:0 }}, Math.max(total - {{ stats.clients_from_referral |default:0 }}, 0)],
-    backgroundColor: ['#28a745', emptyColor]
+                data: [{{ stats.clients_from_referral|default:0 }}, Math.max(total - {{ stats.clients_from_referral|default:0 }}, 0)],
+                backgroundColor: ['#28a745', emptyColor]
             }]
         },
-    options: { ...commonOptions, cutout: '75%' }
+        options: { ...commonOptions, cutout: '75%' }
     });
 
     // Activity Chart
@@ -276,11 +352,11 @@
         data: {
             labels: ['С историей', 'Остальные'],
             datasets: [{
-                data: [{{ stats.clients_posted_story |default:0 }}, Math.max(total - {{ stats.clients_posted_story |default:0 }}, 0)],
-    backgroundColor: ['#dc3545', emptyColor]
+                data: [{{ stats.clients_posted_story|default:0 }}, Math.max(total - {{ stats.clients_posted_story|default:0 }}, 0)],
+                backgroundColor: ['#dc3545', emptyColor]
             }]
         },
-    options: { ...commonOptions, cutout: '75%' }
+        options: { ...commonOptions, cutout: '75%' }
     });
 
     // Return Chart
@@ -289,11 +365,11 @@
         data: {
             labels: ['Повторно', 'Разово'],
             datasets: [{
-                data: [{{ stats.clients_returned_second_time |default:0 }}, Math.max(total - {{ stats.clients_returned_second_time |default:0 }}, 0)],
-    backgroundColor: ['#17a2b8', emptyColor]
+                data: [{{ stats.clients_returned_second_time|default:0 }}, Math.max(total - {{ stats.clients_returned_second_time|default:0 }}, 0)],
+                backgroundColor: ['#17a2b8', emptyColor]
             }]
         },
-    options: { ...commonOptions, cutout: '75%' }
+        options: { ...commonOptions, cutout: '75%' }
     });
 
     // Engagement Chart
@@ -303,14 +379,14 @@
             labels: ['Подарок', 'История', 'Прочие'],
             datasets: [{
                 data: [
-                    {{ stats.new_clients_received_super_prize |default:0 }},
-            {{ stats.clients_posted_story |default:0 }},
-        Math.max(total - {{ stats.new_clients_received_super_prize |default:0 }} - {{ stats.clients_posted_story |default:0 }}, 0)
+                    {{ stats.new_clients_received_super_prize|default:0 }},
+                    {{ stats.clients_posted_story|default:0 }},
+                    Math.max(total - {{ stats.new_clients_received_super_prize|default:0 }} - {{ stats.clients_posted_story|default:0 }}, 0)
                 ],
-    backgroundColor: ['#ffc107', '#6610f2', emptyColor]
+                backgroundColor: ['#ffc107', '#6610f2', emptyColor]
             }]
         },
-    options: { ...commonOptions, cutout: '75%' }
+        options: { ...commonOptions, cutout: '75%' }
     });
 </script>
 {% endblock %}
