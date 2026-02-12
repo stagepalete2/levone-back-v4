@@ -260,7 +260,11 @@
         <div class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
             <h3>🔄 Индекс сканирования</h3>
             <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|default:0 }}%</div>
-            <small class="text-muted">QR сканирования ÷ Гости из IIKO</small>
+            <small class="text-muted">QR сканирования ÷ Гости из 
+                {% if stats.pos_system_type == 'iiko' %}IIKO
+                {% elif stats.pos_system_type == 'dooglys' %}Dooglys
+                {% else %}POS{% endif %}
+            </small>
         </div>
 
         <div class="stat-card">
@@ -269,8 +273,15 @@
         </div>
 
         <div class="stat-card">
-            <h3>👥 Гостей IIKO сегодня</h3>
-            <div class="metric">{{ stats.iiko_guests_today|default:0 }}</div>
+            <h3>👥 Гостей POS сегодня</h3>
+            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
+            {% if stats.pos_system_type %}
+                <small class="text-muted">
+                    {% if stats.pos_system_type == 'iiko' %}IIKO
+                    {% elif stats.pos_system_type == 'dooglys' %}Dooglys
+                    {% endif %}
+                </small>
+            {% endif %}
         </div>
 
         <div class="stat-card">
@@ -283,6 +294,31 @@
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
         </div>
     </div>
+
+    {# ── Детализация по филиалам ── #}
+    {% if stats.pos_guests_by_branch %}
+    <div class="mb-4">
+        <h2 class="section-title">
+            <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">🏢</span>
+            Гости POS сегодня по филиалам
+            {% if stats.pos_system_type %}
+                <span class="badge bg-success">
+                    {% if stats.pos_system_type == 'iiko' %}IIKO
+                    {% elif stats.pos_system_type == 'dooglys' %}Dooglys
+                    {% endif %}
+                </span>
+            {% endif %}
+        </h2>
+        <div class="dashboard-grid">
+            {% for branch_id, data in stats.pos_guests_by_branch.items %}
+            <div class="stat-card">
+                <h3>{{ data.name }}</h3>
+                <div class="metric">{{ data.guests|default:0 }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     <div class="row g-4 mb-5">
         <div class="col-12 col-md-6 col-lg-3">

@@ -62,7 +62,7 @@ class GeneralStatsService:
     # Staff Engagement Index
     # ────────────────────────────────────────────
     @staticmethod
-    def get_staff_engagement_index(date_from=None, date_to=None):
+    def get_staff_engagement_index(date_from=None, date_to=None, branch_id=None):
         """
         (Games served by staff / Total games) * 100
         Считает за указанный период; если date_from=None — за всё время.
@@ -72,6 +72,8 @@ class GeneralStatsService:
             filters['created_at__gte'] = date_from
         if date_to:
             filters['created_at__lte'] = date_to
+        if branch_id:
+            filters['client__branch_id'] = branch_id
 
         total_attempts = ClientAttempt.objects.filter(**filters).count()
         if total_attempts == 0:
@@ -87,17 +89,22 @@ class GeneralStatsService:
     # Основной метод Dashboard
     # ────────────────────────────────────────────
     @classmethod
-    def get_dashboard_stats(cls, period_code: str = None):
+    def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None):
         """
         Собирает статистику за указанный период.
 
         :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
+        :param branch_id: ID филиала для фильтрации (None = все филиалы)
         """
         date_from, date_to, period_code = cls.resolve_period(
             period_code or cls.DEFAULT_PERIOD
         )
 
         base_qs = ClientBranch.objects.all()
+        
+        # ── Фильтр по филиалу ──
+        if branch_id:
+            base_qs = base_qs.filter(branch_id=branch_id)
 
         # ── Фильтр по периоду (created_at) ──
         period_qs = base_qs
@@ -118,6 +125,9 @@ class GeneralStatsService:
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
+        if branch_id:
+            attempt_filters['client__branch_id'] = branch_id
+            
         clients_returned = ClientAttempt.objects.filter(
             **attempt_filters
         ).values("client").annotate(
@@ -137,12 +147,14 @@ class GeneralStatsService:
         referral = period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
 
         # Staff Engagement Index
-        staff_index = cls.get_staff_engagement_index(date_from, date_to)
+        staff_index = cls.get_staff_engagement_index(date_from, date_to, branch_id)
 
         # ── Метрики рассылок ──
         msg_filters = Q(status='sent')
         if date_from:
             msg_filters &= Q(sent_at__gte=date_from)
+        if branch_id:
+            msg_filters &= Q(client__branch_id=branch_id)
 
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
@@ -155,6 +167,8 @@ class GeneralStatsService:
             bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
             if date_from:
                 bp_filters &= Q(activated_at__gte=date_from)
+            if branch_id:
+                bp_filters &= Q(client__branch_id=branch_id)
             activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).count()
         except Exception as e:
             logger.warning("Could not fetch birthday prizes: %s", e)
@@ -165,7 +179,7 @@ class GeneralStatsService:
         total_read = MessageLog.objects.filter(msg_filters, is_read=True).count()
         open_rate = int((total_read / total_sent * 100)) if total_sent > 0 else 0
 
-        # ── VK подписчики (не зависят от периода) ──
+        # ── VK подписчики (не зависят от периода и филиала) ──
         group_subscribers = 0
         mailing_subscribers = 0
         try:
@@ -176,9 +190,10 @@ class GeneralStatsService:
         except Exception as e:
             logger.warning("VK service error: %s", e)
 
-        # ── IIKO / Scan Index (только «сегодня», не зависит от периода) ──
+        # ── IIKO / Scan Index (только «сегодня») ──
         qr_scans_today = 0
         iiko_guests_today = 0
+        iiko_guests_by_branch = {}
         scan_index = 0.0
         try:
             from apps.tenant.stats.iiko import IIKOService
@@ -186,10 +201,24 @@ class GeneralStatsService:
 
             iiko_service = IIKOService()
             today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            qr_scans_today = ClientBranchVisit.objects.filter(
-                visited_at__gte=today_start
-            ).count()
-            iiko_guests_today = iiko_service.get_total_guests_today()
+            
+            # QR сканирования с учетом филиала
+            qr_filters = {'visited_at__gte': today_start}
+            if branch_id:
+                qr_filters['branch_id'] = branch_id
+                
+            qr_scans_today = ClientBranchVisit.objects.filter(**qr_filters).count()
+            
+            # IIKO гости
+            if branch_id:
+                branch = Branch.objects.filter(id=branch_id).first()
+                if branch:
+                    iiko_guests_today = iiko_service.get_total_guests_today(branch=branch)
+            else:
+                # Получаем детальную информацию по каждому филиалу
+                iiko_guests_today = iiko_service.get_total_guests_today()
+                iiko_guests_by_branch = iiko_service.get_olap_guests_count()
+                
             scan_index = iiko_service.calculate_scan_index(qr_scans_today, iiko_guests_today)
         except Exception as e:
             logger.warning("IIKO service error: %s", e)
@@ -212,6 +241,7 @@ class GeneralStatsService:
             "mailing_subscribers": mailing_subscribers,
             "qr_scans_today": qr_scans_today,
             "iiko_guests_today": iiko_guests_today,
+            "iiko_guests_by_branch": iiko_guests_by_branch,
             "scan_index": scan_index,
             "open_rate": open_rate,
         }
