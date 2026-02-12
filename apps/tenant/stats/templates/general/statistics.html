@@ -92,31 +92,22 @@
         color: #777 !important;
     }
 
-    /* ═══ Fix: Bootstrap vs Django Admin Sidebar ═══
-       Bootstrap's global *, *::before, *::after { box-sizing: border-box }
-       breaks Django's sticky sidebar and causes scroll-jump.
-       We isolate the entire admin chrome from Bootstrap's resets.
-    */
-
-    /* 1. Restore box-sizing for admin shell */
+    /* ═══ Fix: Bootstrap vs Django Admin Sidebar ═══ */
     #container, #header, #nav-sidebar,
     #container *, #header *, #nav-sidebar * {
         box-sizing: content-box !important;
     }
 
-    /* 2. Keep sidebar sticky + scrollable (Django defaults) */
     #nav-sidebar {
         position: sticky !important;
         top: 0 !important;
         max-height: 100vh !important;
         overflow-x: hidden !important;
         overflow-y: auto !important;
-        /* Prevent Bootstrap from collapsing width */
         width: 275px !important;
         flex-shrink: 0 !important;
     }
 
-    /* 3. Undo Bootstrap list resets inside sidebar */
     #nav-sidebar ul {
         padding-left: 0;
         margin-bottom: 0;
@@ -126,13 +117,10 @@
         list-style: none;
     }
 
-    /* 4. Prevent Bootstrap's scroll-behavior:smooth on the sidebar
-       (this is the main cause of "jumps to top" on navigation) */
     #nav-sidebar, #nav-sidebar * {
         scroll-behavior: auto !important;
     }
 
-    /* 5. Fix: main content area should use border-box (Bootstrap) */
     #content, #content * {
         box-sizing: border-box !important;
     }
@@ -168,60 +156,215 @@
         background: #28a745;
         color: #fff;
     }
+
+    /* ─── Branch Selector ─── */
+    .branch-selector {
+        display: inline-flex;
+        gap: 0;
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+    .branch-selector a {
+        padding: 8px 16px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #555;
+        text-decoration: none;
+        border-right: 1px solid #e8e8e8;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .branch-selector a:last-child {
+        border-right: none;
+    }
+    .branch-selector a:hover {
+        background: #f0f0ff;
+        color: #4c66a4;
+    }
+    .branch-selector a.active {
+        background: #4c66a4;
+        color: #fff;
+    }
+
+    /* ─── IIKO Guests by Branch Table ─── */
+    .iiko-table-container {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        margin-bottom: 30px;
+    }
+
+    .iiko-table {
+        margin-bottom: 0;
+    }
+
+    .iiko-table thead th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #eeeeee;
+        color: #666666;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        letter-spacing: 0.5px;
+        padding: 14px 16px;
+        font-weight: 700;
+    }
+
+    .iiko-table tbody td {
+        padding: 16px;
+        vertical-align: middle;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 0.85rem;
+    }
+
+    .iiko-table tbody tr:hover td {
+        background-color: #fcfdfd !important;
+    }
+
+    .branch-name {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .guest-count {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: #28a745;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="p-4" style="background-color: #f4f7f6; min-height: 100vh;">
 
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-3">
-        <h1 class="section-title mb-0">
-            <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">📊</span>
-            Статистика — {{ tenant_name|default:"Все клиенты" }}
-        </h1>
+    <div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-3">
+        <div>
+            <h1 class="section-title mb-0">
+                <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">📊</span>
+                Статистика — {{ tenant_name|default:"Все клиенты" }}
+            </h1>
+            {% if selected_branch %}
+                <p class="text-custom-dark fs-5 mb-0 mt-2">
+                    Филиал: <strong>{{ selected_branch.name }}</strong>
+                </p>
+            {% endif %}
+        </div>
 
-        {# ── Переключатель периода ── #}
-        <div class="period-selector">
-            {% for code, meta in period_choices.items %}
-                <a href="?period={{ code }}"
-                   class="{% if code == period_code %}active{% endif %}">
-                    {{ meta.0 }}
+        <div class="d-flex flex-column gap-2 align-items-end">
+            {# ── Переключатель филиала ── #}
+            <div class="branch-selector">
+                <a href="?{% if period_code %}period={{ period_code }}{% endif %}"
+                   class="{% if not selected_branch %}active{% endif %}">
+                    🏢 Все точки
                 </a>
-            {% endfor %}
+                {% for branch in all_branches %}
+                    <a href="?branch={{ branch.id }}{% if period_code %}&period={{ period_code }}{% endif %}"
+                       class="{% if selected_branch and selected_branch.id == branch.id %}active{% endif %}">
+                        {{ branch.name }}
+                    </a>
+                {% endfor %}
+            </div>
+
+            {# ── Переключатель периода ── #}
+            <div class="period-selector">
+                {% for code, meta in period_choices.items %}
+                    <a href="?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ code }}"
+                       class="{% if code == period_code %}active{% endif %}">
+                        {{ meta.0 }}
+                    </a>
+                {% endfor %}
+            </div>
         </div>
     </div>
 
-    <p class='text-custom-dark fs-5 mb-1'>
-        На данной странице представлена сводная статистика по всем ресторанам.
+    <p class='text-custom-dark fs-6 mb-1'>
+        {% if selected_branch %}
+            Статистика по ресторану <strong>{{ selected_branch.name }}</strong>
+        {% else %}
+            Сводная статистика по всем ресторанам
+        {% endif %}
     </p>
     <p class='text-custom-muted fs-6 mb-4'>
         Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RFM-статистику</strong>.
         {% if period_code != 'all' %}
             <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
-                <i class="bi bi-calendar3"></i> {{ period_choices|dictsort:period_code }}
+                <i class="bi bi-calendar3"></i> 
                 {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
             </span>
         {% endif %}
     </p>
 
+    {# ── IIKO Guests by Branch (только если все филиалы) ── #}
+    {% if not selected_branch and stats.iiko_guests_by_branch %}
+        <div class="iiko-table-container mb-4">
+            <div class="p-3 bg-light border-bottom">
+                <h3 class="mb-0" style="font-size: 0.9rem; font-weight: 600; color: #333;">
+                    👥 Гости IIKO сегодня по филиалам
+                </h3>
+            </div>
+            <div class="table-responsive">
+                <table class="table iiko-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Филиал</th>
+                            <th class="text-end">Количество гостей</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for branch_name, guest_count in stats.iiko_guests_by_branch.items %}
+                        <tr>
+                            <td>
+                                <span class="branch-name">{{ branch_name }}</span>
+                            </td>
+                            <td class="text-end">
+                                <span class="guest-count">{{ guest_count }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="2" class="text-center text-custom-muted py-4">
+                                Данные отсутствуют
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if stats.iiko_guests_by_branch %}
+                        <tr class="table-light">
+                            <td class="fw-bold">Всего:</td>
+                            <td class="text-end">
+                                <span class="guest-count">{{ stats.iiko_guests_today }}</span>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="dashboard-grid">
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Оцифрованные гости</h3>
             <div class="metric">{{ stats.total_clients|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Новые за период</h3>
             <div class="metric" style="color: #28a745;">{{ stats.total_clients_period|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Новые + 1-й подарок</h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Вернулись 2-й раз</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
@@ -242,17 +385,17 @@
             <small class="text-muted">Прочитано / Доставлено</small>
         </div>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?period={{ period_code }}" class='stat-card'>
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class='stat-card'>
             <h3>Купили подарки</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Опубликовали истории</h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
             <h3>Из историй</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
@@ -260,11 +403,7 @@
         <div class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
             <h3>🔄 Индекс сканирования</h3>
             <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|default:0 }}%</div>
-            <small class="text-muted">QR сканирования ÷ Гости из 
-                {% if stats.pos_system_type == 'iiko' %}IIKO
-                {% elif stats.pos_system_type == 'dooglys' %}Dooglys
-                {% else %}POS{% endif %}
-            </small>
+            <small class="text-muted">QR сканирования ÷ Гости из IIKO</small>
         </div>
 
         <div class="stat-card">
@@ -273,17 +412,11 @@
         </div>
 
         <div class="stat-card">
-            <h3>👥 Гостей POS сегодня</h3>
-            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
-            {% if stats.pos_system_type %}
-                <small class="text-muted">
-                    {% if stats.pos_system_type == 'iiko' %}IIKO
-                    {% elif stats.pos_system_type == 'dooglys' %}Dooglys
-                    {% endif %}
-                </small>
-            {% endif %}
+            <h3>👥 Гостей IIKO сегодня</h3>
+            <div class="metric">{{ stats.iiko_guests_today|default:0 }}</div>
         </div>
 
+        {% if not selected_branch %}
         <div class="stat-card">
             <h3>📬 Подписчиков группы</h3>
             <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
@@ -293,32 +426,8 @@
             <h3>📨 Подписчиков рассылки</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
         </div>
+        {% endif %}
     </div>
-
-    {# ── Детализация по филиалам ── #}
-    {% if stats.pos_guests_by_branch %}
-    <div class="mb-4">
-        <h2 class="section-title">
-            <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">🏢</span>
-            Гости POS сегодня по филиалам
-            {% if stats.pos_system_type %}
-                <span class="badge bg-success">
-                    {% if stats.pos_system_type == 'iiko' %}IIKO
-                    {% elif stats.pos_system_type == 'dooglys' %}Dooglys
-                    {% endif %}
-                </span>
-            {% endif %}
-        </h2>
-        <div class="dashboard-grid">
-            {% for branch_id, data in stats.pos_guests_by_branch.items %}
-            <div class="stat-card">
-                <h3>{{ data.name }}</h3>
-                <div class="metric">{{ data.guests|default:0 }}</div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 
     <div class="row g-4 mb-5">
         <div class="col-12 col-md-6 col-lg-3">

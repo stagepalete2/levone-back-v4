@@ -17,6 +17,8 @@ from apps.tenant.stats.models import (
     RFSegment, GuestRFScore, RFMigrationLog, 
     RFSettings, BranchSegmentSnapshot
 )
+from apps.tenant.stats.iiko import IIKOService
+from apps.tenant.stats.dooglys import DooglysService
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ class GeneralStatsService:
     # Staff Engagement Index
     # ────────────────────────────────────────────
     @staticmethod
-    def get_staff_engagement_index(date_from=None, date_to=None, branch_id=None):
+    def get_staff_engagement_index(date_from=None, date_to=None):
         """
         (Games served by staff / Total games) * 100
         Считает за указанный период; если date_from=None — за всё время.
@@ -72,8 +74,6 @@ class GeneralStatsService:
             filters['created_at__gte'] = date_from
         if date_to:
             filters['created_at__lte'] = date_to
-        if branch_id:
-            filters['client__branch_id'] = branch_id
 
         total_attempts = ClientAttempt.objects.filter(**filters).count()
         if total_attempts == 0:
@@ -89,22 +89,17 @@ class GeneralStatsService:
     # Основной метод Dashboard
     # ────────────────────────────────────────────
     @classmethod
-    def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None):
+    def get_dashboard_stats(cls, period_code: str = None):
         """
         Собирает статистику за указанный период.
 
         :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
-        :param branch_id: ID филиала для фильтрации (None = все филиалы)
         """
         date_from, date_to, period_code = cls.resolve_period(
             period_code or cls.DEFAULT_PERIOD
         )
 
         base_qs = ClientBranch.objects.all()
-        
-        # ── Фильтр по филиалу ──
-        if branch_id:
-            base_qs = base_qs.filter(branch_id=branch_id)
 
         # ── Фильтр по периоду (created_at) ──
         period_qs = base_qs
@@ -125,9 +120,6 @@ class GeneralStatsService:
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
-        if branch_id:
-            attempt_filters['client__branch_id'] = branch_id
-            
         clients_returned = ClientAttempt.objects.filter(
             **attempt_filters
         ).values("client").annotate(
@@ -147,14 +139,12 @@ class GeneralStatsService:
         referral = period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
 
         # Staff Engagement Index
-        staff_index = cls.get_staff_engagement_index(date_from, date_to, branch_id)
+        staff_index = cls.get_staff_engagement_index(date_from, date_to)
 
         # ── Метрики рассылок ──
         msg_filters = Q(status='sent')
         if date_from:
             msg_filters &= Q(sent_at__gte=date_from)
-        if branch_id:
-            msg_filters &= Q(client__branch_id=branch_id)
 
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
@@ -167,8 +157,6 @@ class GeneralStatsService:
             bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
             if date_from:
                 bp_filters &= Q(activated_at__gte=date_from)
-            if branch_id:
-                bp_filters &= Q(client__branch_id=branch_id)
             activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).count()
         except Exception as e:
             logger.warning("Could not fetch birthday prizes: %s", e)
@@ -179,7 +167,7 @@ class GeneralStatsService:
         total_read = MessageLog.objects.filter(msg_filters, is_read=True).count()
         open_rate = int((total_read / total_sent * 100)) if total_sent > 0 else 0
 
-        # ── VK подписчики (не зависят от периода и филиала) ──
+        # ── VK подписчики (не зависят от периода) ──
         group_subscribers = 0
         mailing_subscribers = 0
         try:
@@ -190,38 +178,62 @@ class GeneralStatsService:
         except Exception as e:
             logger.warning("VK service error: %s", e)
 
-        # ── IIKO / Scan Index (только «сегодня») ──
+        # ── Данные о гостях из POS систем (IIKO / Dooglys) - только «сегодня» ──
         qr_scans_today = 0
-        iiko_guests_today = 0
-        iiko_guests_by_branch = {}
+        pos_guests_today = 0  # Переименовали с iiko_guests_today
         scan_index = 0.0
+        guests_by_branch = {}  # Детализация по филиалам
+        
         try:
-            from apps.tenant.stats.iiko import IIKOService
             from apps.tenant.branch.models import ClientBranchVisit
-
-            iiko_service = IIKOService()
+            
+            # Подсчёт QR-сканирований за сегодня
             today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            qr_scans_today = ClientBranchVisit.objects.filter(
+                visited_at__gte=today_start
+            ).count()
             
-            # QR сканирования с учетом филиала
-            qr_filters = {'visited_at__gte': today_start}
-            if branch_id:
-                qr_filters['branch_id'] = branch_id
-                
-            qr_scans_today = ClientBranchVisit.objects.filter(**qr_filters).count()
+            # Получение данных о гостях из POS систем
+            branches = Branch.objects.all()
             
-            # IIKO гости
-            if branch_id:
-                branch = Branch.objects.filter(id=branch_id).first()
-                if branch:
-                    iiko_guests_today = iiko_service.get_total_guests_today(branch=branch)
-            else:
-                # Получаем детальную информацию по каждому филиалу
-                iiko_guests_today = iiko_service.get_total_guests_today()
-                iiko_guests_by_branch = iiko_service.get_olap_guests_count()
+            for branch in branches:
+                branch_guests = 0
+                source_type = None  # 'IIKO' или 'Dooglys'
                 
-            scan_index = iiko_service.calculate_scan_index(qr_scans_today, iiko_guests_today)
+                # Определяем источник данных для филиала
+                if branch.iiko_organization_id and branch.iiko_organization_id.strip():
+                    # Используем IIKO
+                    try:
+                        iiko_service = IIKOService()
+                        branch_guests = iiko_service.get_total_guests_today(branch)
+                        source_type = 'IIKO'
+                    except Exception as e:
+                        logger.warning(f"IIKO error for branch {branch.id}: {e}")
+                        
+                elif branch.dooglys_branch_id:
+                    # Используем Dooglys
+                    try:
+                        dooglys_service = DooglysService()
+                        branch_guests = dooglys_service.get_total_guests_today(branch)
+                        source_type = 'Dooglys'
+                    except Exception as e:
+                        logger.warning(f"Dooglys error for branch {branch.id}: {e}")
+                
+                # Сохраняем данные по филиалу
+                if branch_guests > 0:
+                    guests_by_branch[branch.id] = {
+                        'name': branch.name,
+                        'count': branch_guests,
+                        'source': source_type
+                    }
+                    pos_guests_today += branch_guests
+            
+            # Расчёт индекса сканирования
+            if pos_guests_today > 0:
+                scan_index = round((qr_scans_today / pos_guests_today) * 100, 2)
+                
         except Exception as e:
-            logger.warning("IIKO service error: %s", e)
+            logger.warning(f"POS systems integration error: {e}")
 
         return {
             "total_clients": total_clients,
@@ -240,8 +252,9 @@ class GeneralStatsService:
             "group_subscribers": group_subscribers,
             "mailing_subscribers": mailing_subscribers,
             "qr_scans_today": qr_scans_today,
-            "iiko_guests_today": iiko_guests_today,
-            "iiko_guests_by_branch": iiko_guests_by_branch,
+            "pos_guests_today": pos_guests_today,  # Новое универсальное название
+            "iiko_guests_today": pos_guests_today,  # Для обратной совместимости
+            "guests_by_branch": guests_by_branch,  # Детализация по филиалам
             "scan_index": scan_index,
             "open_rate": open_rate,
         }
