@@ -12,7 +12,7 @@ import hashlib
 import logging
 import requests
 from typing import Optional, Dict, Any
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from django_tenants.utils import get_tenant_model
 
@@ -171,9 +171,9 @@ class IIKOService:
         
         # Дефолтные даты — сегодня
         if date_from is None:
-            date_from = date.today()
+            date_from = date.today() - timedelta(days=1)
         if date_to is None:
-            date_to = date.today()
+            date_to = date.today() - timedelta(days=1)
         
         # Форматирование дат
         from_str = date_from.strftime("%Y-%m-%d")
