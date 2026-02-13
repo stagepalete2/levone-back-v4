@@ -22,9 +22,42 @@ class Branch(TimeStampedModel):
         blank=True, 
         null=True, 
         verbose_name='IIKO Organization ID (Department)',
-        help_text='ID ресторана из IIKO"'
+        help_text='ID ресторана из IIKO (Если у вас IIKO, оставьте пустым Dooglys)'
     )
-
+    
+    dooglys_branch_id = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        verbose_name='Dooglys branch ID',
+        help_text='ID ресторана из Dooglys (Если у вас Dooglys, оставьте пустым IIKO)',
+        unique=True
+    )
+    
+    def clean(self):
+        '''Валидация: можно заполнить только одно из полей - iiko_organization_id или dooglys_branch_id'''
+        super().clean()
+        
+        # Проверяем, что заполнено не более одного поля
+        has_iiko = bool(self.iiko_organization_id and self.iiko_organization_id.strip())
+        has_dooglys = self.dooglys_branch_id is not None
+        
+        if has_iiko and has_dooglys:
+            raise ValidationError({
+                'iiko_organization_id': 'Нельзя одновременно указать IIKO Organization ID и Dooglys Branch ID. Выберите один источник.',
+                'dooglys_branch_id': 'Нельзя одновременно указать IIKO Organization ID и Dooglys Branch ID. Выберите один источник.'
+            })
+        
+        # Проверяем, что хотя бы одно поле заполнено (опционально - закомментируйте если не нужно)
+        if not has_iiko and not has_dooglys:
+            raise ValidationError(
+                'Необходимо указать хотя бы один идентификатор: IIKO Organization ID или Dooglys Branch ID'
+            )
+    
+    def save(self, *args, **kwargs):
+        '''Переопределяем save для вызова clean() при сохранении'''
+        self.clean()
+        super().save(*args, **kwargs)
+    
     def __str__(self):
         return self.name
     

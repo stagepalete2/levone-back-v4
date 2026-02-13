@@ -320,7 +320,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for branch_id, branch_data in stats.iiko_guests_by_branch.items %}
+                        {% for branch_id, branch_data in stats.pos_guests_by_branch.items %}
                         <tr>
                             <td>
                                 <span class="branch-name">{{ branch_data.name }}</span>
@@ -345,11 +345,11 @@
                             </td>
                         </tr>
                         {% endfor %}
-                        {% if stats.iiko_guests_by_branch %}
+                        {% if stats.pos_guests_by_branch %}
                         <tr class="table-light">
                             <td class="fw-bold" colspan="2">Всего:</td>
                             <td class="text-end">
-                                <span class="guest-count">{{ stats.iiko_guests_today }}</span>
+                                <span class="guest-count">{{ stats.pos_guests_today }}</span>
                             </td>
                         </tr>
                         {% endif %}
@@ -424,8 +424,9 @@
         </div>
 
         <div class="stat-card">
-            <h3>👥 Гостей сегодня</h3>
-            <div class="metric">{{ stats.iiko_guests_today|default:0 }}</div>
+            <h3>👥 Гостей сегодня (POS)</h3>
+            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
+            <small class="text-muted">Данные из IIKO / Dooglys</small>
         </div>
 
         {% if not selected_branch %}

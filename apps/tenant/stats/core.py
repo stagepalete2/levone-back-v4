@@ -89,17 +89,22 @@ class GeneralStatsService:
     # Основной метод Dashboard
     # ────────────────────────────────────────────
     @classmethod
-    def get_dashboard_stats(cls, period_code: str = None):
+    def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None):
         """
-        Собирает статистику за указанный период.
+        Собирает статистику за указанный период и филиал.
 
         :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
+        :param branch_id: ID филиала для фильтрации (опционально)
         """
         date_from, date_to, period_code = cls.resolve_period(
             period_code or cls.DEFAULT_PERIOD
         )
 
         base_qs = ClientBranch.objects.all()
+        
+        # Фильтрация по филиалу
+        if branch_id:
+            base_qs = base_qs.filter(branch_id=branch_id)
 
         # ── Фильтр по периоду (created_at) ──
         period_qs = base_qs
@@ -120,6 +125,8 @@ class GeneralStatsService:
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
+        if branch_id:
+            attempt_filters['client__branch_id'] = branch_id
         clients_returned = ClientAttempt.objects.filter(
             **attempt_filters
         ).values("client").annotate(
@@ -180,25 +187,33 @@ class GeneralStatsService:
 
         # ── Данные о гостях из POS систем (IIKO / Dooglys) - только «сегодня» ──
         qr_scans_today = 0
-        pos_guests_today = 0  # Переименовали с iiko_guests_today
+        pos_guests_today = 0
         scan_index = 0.0
-        guests_by_branch = {}  # Детализация по филиалам
+        guests_by_branch = {}  # Детализация по филиалам (IIKO + Dooglys)
         
         try:
             from apps.tenant.branch.models import ClientBranchVisit
             
-            # Подсчёт QR-сканирований за сегодня
+            # Подсчёт QR-сканирований за сегодня с учетом выбранного филиала
             today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            qr_scans_today = ClientBranchVisit.objects.filter(
-                visited_at__gte=today_start
-            ).count()
+            qr_visits_filter = Q(visited_at__gte=today_start)
+            
+            if branch_id:
+                qr_visits_filter &= Q(client__branch_id=branch_id)
+            
+            qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
             
             # Получение данных о гостях из POS систем
-            branches = Branch.objects.all()
+            if branch_id:
+                # Если выбран конкретный филиал - берем только его
+                branches = Branch.objects.filter(id=branch_id)
+            else:
+                # Иначе берем все филиалы
+                branches = Branch.objects.all()
             
             for branch in branches:
                 branch_guests = 0
-                source_type = None  # 'IIKO' или 'Dooglys'
+                source_type = None
                 
                 # Определяем источник данных для филиала
                 if branch.iiko_organization_id and branch.iiko_organization_id.strip():
@@ -220,20 +235,23 @@ class GeneralStatsService:
                         logger.warning(f"Dooglys error for branch {branch.id}: {e}")
                 
                 # Сохраняем данные по филиалу
-                if branch_guests > 0:
+                if branch_guests > 0 or source_type:
                     guests_by_branch[branch.id] = {
                         'name': branch.name,
                         'count': branch_guests,
                         'source': source_type
                     }
-                    pos_guests_today += branch_guests
+                
+                pos_guests_today += branch_guests
             
-            # Расчёт индекса сканирования
-            if pos_guests_today > 0:
+            # Расчет индекса сканирования (QR / POS * 100%)
+            if pos_guests_today > 0 and qr_scans_today > 0:
                 scan_index = round((qr_scans_today / pos_guests_today) * 100, 2)
+            else:
+                scan_index = 0.0
                 
         except Exception as e:
-            logger.warning(f"POS systems integration error: {e}")
+            logger.error(f"POS systems integration error: {e}")
 
         return {
             "total_clients": total_clients,
@@ -252,9 +270,10 @@ class GeneralStatsService:
             "group_subscribers": group_subscribers,
             "mailing_subscribers": mailing_subscribers,
             "qr_scans_today": qr_scans_today,
-            "pos_guests_today": pos_guests_today,  # Новое универсальное название
+            "pos_guests_today": pos_guests_today,
             "iiko_guests_today": pos_guests_today,  # Для обратной совместимости
-            "guests_by_branch": guests_by_branch,  # Детализация по филиалам
+            "pos_guests_by_branch": guests_by_branch,  # Детализация по филиалам (IIKO + Dooglys)
+            "iiko_guests_by_branch": guests_by_branch,  # Для обратной совместимости
             "scan_index": scan_index,
             "open_rate": open_rate,
         }

@@ -65,6 +65,15 @@ class CompanyConfig(TimeStampedModel):
 		help_text='Пароль будет зашифрован SHA1 при отправке'
 	)
 
+	dooglys_api_url = models.URLField(
+		blank=True, 
+		null=True, 
+		verbose_name='DOOGLYS API URL',
+		help_text='Базовый URL API, например: https://tenant.dooglys.com'
+	)
+
+	dooglys_api_token = models.CharField(max_length=255, verbose_name='DOOGLYS API TOKEN')
+
 	def __str__(self):
 		return f'Настройки для {self.company}'
 	
