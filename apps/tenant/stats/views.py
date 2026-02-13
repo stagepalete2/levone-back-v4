@@ -57,35 +57,71 @@ class PeriodMixin:
         }
 
 
-class StatisticsView(PeriodMixin, BaseAdminStatsView, TemplateView):
+class BranchMixin:
+    """
+    Миксин, читающий GET-параметр ?branch= и добавляющий
+    в контекст информацию о выбранном филиале.
+    """
+
+    def get_branch_context(self):
+        branch_id = self.request.GET.get('branch')
+        selected_branch = None
+        
+        if branch_id:
+            try:
+                selected_branch = Branch.objects.get(id=int(branch_id))
+            except (Branch.DoesNotExist, ValueError):
+                pass
+        
+        return {
+            'all_branches': Branch.objects.all().order_by('name'),
+            'selected_branch': selected_branch,
+            'selected_branch_id': selected_branch.id if selected_branch else None,
+        }
+
+
+class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView):
     template_name = "general/statistics.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
         period_ctx = self.get_period_context()
+        branch_ctx = self.get_branch_context()
+        
         context.update(period_ctx)
+        context.update(branch_ctx)
 
-        # Получаем статистику за выбранный период
+        # Получаем статистику за выбранный период и филиал
         context["stats"] = GeneralStatsService.get_dashboard_stats(
-            period_code=period_ctx['period_code']
+            period_code=period_ctx['period_code'],
+            branch_id=branch_ctx.get('selected_branch_id')
         )
+        
         return context
 
 
-class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
+class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView):
     template_name = 'general/statistics_detail.html'
 
     def get_context_data(self, stat_name, **kwargs):
         context = super().get_context_data(**kwargs)
 
         period_ctx = self.get_period_context()
+        branch_ctx = self.get_branch_context()
+        
         context.update(period_ctx)
+        context.update(branch_ctx)
 
         date_from = period_ctx['date_from']
 
         # Базовый QuerySet
         qs = ClientBranch.objects.all()
+        
+        # Фильтр по филиалу если выбран
+        if branch_ctx.get('selected_branch_id'):
+            qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
+        
         if date_from:
             period_qs = qs.filter(created_at__gte=date_from)
         else:
@@ -117,10 +153,10 @@ class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
             ),
 
             # 4. Вернулись 2-й раз
-            "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from),
+            "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, branch_ctx.get('selected_branch_id')),
 
             # 5. Скан в День Рождения
-            "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from),
+            "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, branch_ctx.get('selected_branch_id')),
 
             # 6. Купили подарки (Трата коинов)
             "clients_bought_prizes": (
@@ -164,10 +200,13 @@ class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
     # ── Вспомогательные методы (вынесены, чтобы не считать всё подряд) ──
 
     @staticmethod
-    def _get_returned_clients(qs, date_from):
+    def _get_returned_clients(qs, date_from, branch_id=None):
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
+        if branch_id:
+            attempt_filters['client__branch_id'] = branch_id
+            
         repeat_client_ids = ClientAttempt.objects.filter(
             **attempt_filters
         ).values('client').annotate(
@@ -176,7 +215,7 @@ class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
         return ('Вернулись повторно', qs.filter(id__in=repeat_client_ids))
 
     @staticmethod
-    def _get_birthday_clients(qs, date_from):
+    def _get_birthday_clients(qs, date_from, branch_id=None):
         filters = Q(
             client__birth_date__isnull=False,
             created_at__day=F('client__birth_date__day'),
@@ -184,6 +223,9 @@ class StatisticsDetailView(PeriodMixin, BaseAdminStatsView, TemplateView):
         )
         if date_from:
             filters &= Q(created_at__gte=date_from)
+        if branch_id:
+            filters &= Q(branch_id=branch_id)
+            
         birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
         return ('Сканировали в День Рождения', qs.filter(id__in=birthday_attempt_ids))
 
