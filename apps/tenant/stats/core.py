@@ -60,6 +60,35 @@ class GeneralStatsService:
 
         return date_from, date_to, period_code
 
+    @classmethod
+    def resolve_custom_period(cls, date_from_str: str, date_to_str: str):
+        """
+        Возвращает (date_from, date_to) по пользовательским датам из календаря.
+        
+        :param date_from_str: Дата начала в формате YYYY-MM-DD
+        :param date_to_str: Дата окончания в формате YYYY-MM-DD
+        :return: (date_from, date_to, 'custom')
+        """
+        from datetime import datetime
+        try:
+            # Парсим даты
+            date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
+            date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
+            
+            # Устанавливаем время: начало дня для date_from, конец дня для date_to
+            date_from = timezone.make_aware(
+                date_from.replace(hour=0, minute=0, second=0, microsecond=0)
+            )
+            date_to = timezone.make_aware(
+                date_to.replace(hour=23, minute=59, second=59, microsecond=999999)
+            )
+            
+            return date_from, date_to, 'custom'
+        except (ValueError, TypeError):
+            # В случае ошибки парсинга возвращаем период по умолчанию
+            logger.warning(f"Invalid custom dates: {date_from_str}, {date_to_str}. Using default period.")
+            return cls.resolve_period(cls.DEFAULT_PERIOD)
+
     # ────────────────────────────────────────────
     # Staff Engagement Index
     # ────────────────────────────────────────────

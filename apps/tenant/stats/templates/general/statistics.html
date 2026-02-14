@@ -157,6 +157,83 @@
         color: #fff;
     }
 
+    /* ─── Custom Date Range Picker ─── */
+    .date-range-picker {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    
+    .date-range-picker label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #666;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    
+    .date-range-picker input[type="date"] {
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 0.85rem;
+        color: #333;
+        transition: all 0.15s;
+        min-width: 150px;
+    }
+    
+    .date-range-picker input[type="date"]:focus {
+        outline: none;
+        border-color: #28a745;
+        box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.1);
+    }
+    
+    .date-range-picker button {
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    
+    .date-range-picker button:hover {
+        background: #218838;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+    }
+    
+    .date-range-picker button:active {
+        transform: translateY(0);
+    }
+
+    .date-range-picker .reset-btn {
+        background: #6c757d;
+        padding: 6px 16px;
+    }
+    
+    .date-range-picker .reset-btn:hover {
+        background: #5a6268;
+        box-shadow: 0 2px 6px rgba(108, 117, 125, 0.3);
+    }
+
+    .period-controls-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-end;
+    }
+
     /* ─── Branch Selector ─── */
     .branch-selector {
         display: inline-flex;
@@ -273,14 +350,39 @@
                 {% endfor %}
             </div>
 
-            {# ── Переключатель периода ── #}
-            <div class="period-selector">
-                {% for code, meta in period_choices.items %}
-                    <a href="?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ code }}"
-                       class="{% if code == period_code %}active{% endif %}">
-                        {{ meta.0 }}
-                    </a>
-                {% endfor %}
+            {# ── Переключатель периода и календарь ── #}
+            <div class="period-controls-wrapper">
+                {# Быстрые кнопки периодов #}
+                <div class="period-selector">
+                    {% for code, meta in period_choices.items %}
+                        <a href="?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ code }}"
+                           class="{% if code == period_code and not custom_date_from %}active{% endif %}">
+                            {{ meta.0 }}
+                        </a>
+                    {% endfor %}
+                </div>
+                
+                {# Календарь для пользовательского выбора #}
+                <div class="date-range-picker">
+                    <label for="custom_date_from">📅 Период:</label>
+                    <input 
+                        type="date" 
+                        id="custom_date_from" 
+                        name="custom_date_from" 
+                        value="{{ custom_date_from|default:'' }}"
+                        placeholder="От">
+                    <span style="color: #999;">—</span>
+                    <input 
+                        type="date" 
+                        id="custom_date_to" 
+                        name="custom_date_to" 
+                        value="{{ custom_date_to|default:'' }}"
+                        placeholder="До">
+                    <button type="button" onclick="applyCustomPeriod()">Применить</button>
+                    {% if custom_date_from %}
+                    <button type="button" class="reset-btn" onclick="resetPeriod()">Сбросить</button>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -294,7 +396,12 @@
     </p>
     <p class='text-custom-muted fs-6 mb-4'>
         Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RFM-статистику</strong>.
-        {% if period_code != 'all' %}
+        {% if custom_date_from and custom_date_to %}
+            <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
+                <i class="bi bi-calendar3"></i> 
+                {{ custom_date_from }} — {{ custom_date_to }}
+            </span>
+        {% elif period_code != 'all' %}
             <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
                 <i class="bi bi-calendar3"></i> 
                 {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
@@ -373,23 +480,37 @@
     {% endif %}
 
     <div class="dashboard-grid">
+        {# Формируем параметры URL для ссылок на детальную статистику #}
+        {% if custom_date_from and custom_date_to %}
+            {% if selected_branch_id %}
+                {% with period_params="branch="|add:selected_branch_id|add:"&custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
+            {% else %}
+                {% with period_params="custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
+            {% endif %}
+        {% else %}
+            {% if selected_branch_id %}
+                {% with period_params="branch="|add:selected_branch_id|add:"&period="|add:period_code %}
+            {% else %}
+                {% with period_params="period="|add:period_code %}
+            {% endif %}
+        {% endif %}
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{{ period_params }}" class="stat-card">
             <h3>Оцифрованные гости</h3>
             <div class="metric">{{ stats.total_clients|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?{{ period_params }}" class="stat-card">
             <h3>Новые за период</h3>
             <div class="metric" style="color: #28a745;">{{ stats.total_clients_period|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{{ period_params }}" class="stat-card">
             <h3>Новые + 1-й подарок</h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{{ period_params }}" class="stat-card">
             <h3>Вернулись 2-й раз</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
@@ -410,17 +531,17 @@
             <small class="text-muted">Прочитано / Доставлено</small>
         </div>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class='stat-card'>
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class='stat-card'>
             <h3>Купили подарки</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{{ period_params }}" class="stat-card">
             <h3>Опубликовали истории</h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ period_code }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{{ period_params }}" class="stat-card">
             <h3>Из историй</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
@@ -435,7 +556,11 @@
             <h3>📱 QR сканирований за период</h3>
             <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
             <small class="text-muted">
-                {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+                {% if custom_date_from and custom_date_to %}
+                    {{ custom_date_from }} — {{ custom_date_to }}
+                {% else %}
+                    {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+                {% endif %}
             </small>
         </div>
 
@@ -444,7 +569,11 @@
             <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
             <small class="text-muted">
                 IIKO / Dooglys
-                · {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+                · {% if custom_date_from and custom_date_to %}
+                    {{ custom_date_from }} — {{ custom_date_to }}
+                {% else %}
+                    {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+                {% endif %}
             </small>
         </div>
 
@@ -460,6 +589,7 @@
         </div>
         {% endif %}
     </div>
+    {% endwith %}
 
     <div class="row g-4 mb-5">
         <div class="col-12 col-md-6 col-lg-3">
@@ -564,6 +694,59 @@
             }]
         },
         options: { ...commonOptions, cutout: '75%' }
+    });
+</script>
+
+<script>
+    // Обработка пользовательского периода
+    function applyCustomPeriod() {
+        const dateFrom = document.getElementById('custom_date_from').value;
+        const dateTo = document.getElementById('custom_date_to').value;
+        
+        if (!dateFrom || !dateTo) {
+            alert('Пожалуйста, выберите обе даты');
+            return;
+        }
+        
+        // Проверка, что dateFrom не позже dateTo
+        if (new Date(dateFrom) > new Date(dateTo)) {
+            alert('Дата начала не может быть позже даты окончания');
+            return;
+        }
+        
+        // Формируем URL с параметрами
+        const branchParam = '{{ selected_branch_id|default:"" }}';
+        let url = '?custom_date_from=' + dateFrom + '&custom_date_to=' + dateTo;
+        
+        if (branchParam) {
+            url += '&branch=' + branchParam;
+        }
+        
+        window.location.href = url;
+    }
+    
+    function resetPeriod() {
+        const branchParam = '{{ selected_branch_id|default:"" }}';
+        let url = '?period={{ DEFAULT_PERIOD|default:"30d" }}';
+        
+        if (branchParam) {
+            url += '&branch=' + branchParam;
+        }
+        
+        window.location.href = url;
+    }
+    
+    // Поддержка Enter в полях дат
+    document.getElementById('custom_date_from').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            applyCustomPeriod();
+        }
+    });
+    
+    document.getElementById('custom_date_to').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            applyCustomPeriod();
+        }
     });
 </script>
 {% endblock %}

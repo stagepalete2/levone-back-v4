@@ -42,18 +42,32 @@ class BaseAdminStatsView(LoginRequiredMixin, UserPassesTestMixin):
 
 class PeriodMixin:
     """
-    Миксин, читающий GET-параметр ?period= и добавляющий
-    в контекст resolved-диапазон + список вариантов для UI.
+    Миксин, читающий GET-параметр ?period= или custom_date_from/custom_date_to
+    и добавляющий в контекст resolved-диапазон + список вариантов для UI.
     """
 
     def get_period_context(self):
-        period_code = self.request.GET.get('period', GeneralStatsService.DEFAULT_PERIOD)
-        date_from, date_to, period_code = GeneralStatsService.resolve_period(period_code)
+        # Проверяем, есть ли пользовательские даты
+        custom_date_from = self.request.GET.get('custom_date_from')
+        custom_date_to = self.request.GET.get('custom_date_to')
+        
+        if custom_date_from and custom_date_to:
+            # Используем пользовательские даты
+            date_from, date_to, period_code = GeneralStatsService.resolve_custom_period(
+                custom_date_from, custom_date_to
+            )
+        else:
+            # Используем предустановленный период
+            period_code = self.request.GET.get('period', GeneralStatsService.DEFAULT_PERIOD)
+            date_from, date_to, period_code = GeneralStatsService.resolve_period(period_code)
+        
         return {
             'period_code': period_code,
             'date_from': date_from,
             'date_to': date_to,
             'period_choices': GeneralStatsService.PERIOD_CHOICES,
+            'custom_date_from': custom_date_from,
+            'custom_date_to': custom_date_to,
         }
 
 
