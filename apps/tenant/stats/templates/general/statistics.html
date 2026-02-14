@@ -484,14 +484,22 @@
         {% if custom_date_from and custom_date_to %}
             {% if selected_branch_id %}
                 {% with period_params="branch="|add:selected_branch_id|add:"&custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
+                    
+                    {% endwith %}
             {% else %}
                 {% with period_params="custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
+                    
+                    {% endwith %}
             {% endif %}
         {% else %}
             {% if selected_branch_id %}
                 {% with period_params="branch="|add:selected_branch_id|add:"&period="|add:period_code %}
+                    
+                    {% endwith %}
             {% else %}
                 {% with period_params="period="|add:period_code %}
+                    
+                    {% endwith %}
             {% endif %}
         {% endif %}
 
@@ -589,7 +597,6 @@
         </div>
         {% endif %}
     </div>
-    {% endwith %}
 
     <div class="row g-4 mb-5">
         <div class="col-12 col-md-6 col-lg-3">
