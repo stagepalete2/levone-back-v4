@@ -302,13 +302,26 @@
         {% endif %}
     </p>
 
-    {# ── POS Guests by Branch (только если все филиалы) ── #}
-    {% if not selected_branch and stats.iiko_guests_by_branch %}
+    {# ── POS Guests by Branch ── #}
+    {% if stats.pos_guests_by_branch %}
         <div class="iiko-table-container mb-4">
-            <div class="p-3 bg-light border-bottom">
+            <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h3 class="mb-0" style="font-size: 0.9rem; font-weight: 600; color: #333;">
-                    👥 Гости POS системы сегодня по филиалам
+                    👥 Гости POS системы по филиалам
                 </h3>
+                {# Показываем, за какой период взяты данные из POS #}
+                <span class="badge bg-light text-dark border" style="font-size:.78rem">
+                    <i class="bi bi-calendar3"></i>
+                    {% if stats.pos_date_from and stats.pos_date_to %}
+                        {% if stats.pos_date_from == stats.pos_date_to %}
+                            {{ stats.pos_date_from }}
+                        {% else %}
+                            {{ stats.pos_date_from }} — {{ stats.pos_date_to }}
+                        {% endif %}
+                    {% else %}
+                        Сегодня
+                    {% endif %}
+                </span>
             </div>
             <div class="table-responsive">
                 <table class="table iiko-table align-middle">
@@ -320,7 +333,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for branch_id, branch_data in stats.pos_guests_by_branch.items %}
+                        {% for bid, branch_data in stats.pos_guests_by_branch.items %}
                         <tr>
                             <td>
                                 <span class="branch-name">{{ branch_data.name }}</span>
@@ -419,14 +432,20 @@
         </div>
 
         <div class="stat-card">
-            <h3>📱 QR сканирований сегодня</h3>
+            <h3>📱 QR сканирований за период</h3>
             <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
+            <small class="text-muted">
+                {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+            </small>
         </div>
 
         <div class="stat-card">
-            <h3>👥 Гостей сегодня (POS)</h3>
+            <h3>👥 Гостей по POS системе</h3>
             <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
-            <small class="text-muted">Данные из IIKO / Dooglys</small>
+            <small class="text-muted">
+                IIKO / Dooglys
+                · {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+            </small>
         </div>
 
         {% if not selected_branch %}
