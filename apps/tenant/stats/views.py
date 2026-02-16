@@ -106,10 +106,15 @@ class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView)
         context.update(period_ctx)
         context.update(branch_ctx)
 
-        # Получаем статистику за выбранный период и филиал
+        # Получаем статистику за выбранный период и филиал.
+        # Передаём date_from/date_to явно, чтобы кастомный период не терялся:
+        # внутри get_dashboard_stats period_code='custom' не в PERIOD_CHOICES
+        # и без явных дат упал бы в fallback DEFAULT_PERIOD (30d).
         context["stats"] = GeneralStatsService.get_dashboard_stats(
             period_code=period_ctx['period_code'],
-            branch_id=branch_ctx.get('selected_branch_id')
+            branch_id=branch_ctx.get('selected_branch_id'),
+            date_from=period_ctx.get('date_from'),
+            date_to=period_ctx.get('date_to'),
         )
         
         return context

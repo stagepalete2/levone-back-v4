@@ -18,6 +18,12 @@ from django_tenants.utils import get_tenant_model
 
 logger = logging.getLogger(__name__)
 
+# Кэш токенов: {(base_url, login): (token, expires_at)}
+# Токен живёт 15 минут в IIKO — кэшируем чтобы не создавать новое
+# соединение на каждый запрос (иначе лицензионные слоты быстро кончаются).
+_token_cache: dict = {}
+_TOKEN_TTL_SECONDS = 14 * 60  # 14 минут (с запасом до истечения 15 мин)
+
 
 class IIKOService:
     """
@@ -73,33 +79,53 @@ class IIKOService:
     
     def _auth(self) -> Optional[str]:
         """
-        Аутентификация в IIKO API.
-        
-        POST /resto/api/auth
-        Params: login, pass (SHA1 hash)
-        Returns: JWT токен
+        Аутентификация в IIKO API с кэшированием токена.
+
+        Токен кэшируется на уровне модуля на 14 минут (IIKO выдаёт на 15).
+        Это предотвращает 403 "no connections available" при множественных
+        вызовах — каждый вызов _make_request больше не создаёт новое соединение.
         """
         if not self.is_configured:
             logger.error("IIKO Service not configured")
             return None
-        
+
+        cache_key = (self.base_url, self.login)
+        now = datetime.utcnow()
+
+        # Проверяем кэш
+        if cache_key in _token_cache:
+            cached_token, expires_at = _token_cache[cache_key]
+            if now < expires_at:
+                self.token = cached_token
+                logger.debug("IIKO auth: using cached token (expires in %ds)",
+                             (expires_at - now).seconds)
+                return self.token
+            else:
+                logger.debug("IIKO auth: cached token expired, re-authenticating")
+                del _token_cache[cache_key]
+
+        # Запрашиваем новый токен
         url = f"{self.base_url}/resto/api/auth"
         params = {
             'login': self.login,
             'pass': self._hash_password(self.password)
         }
-        
+
         try:
             response = requests.get(url, params=params, verify=False, timeout=15)
-            
+
             if response.status_code == 200:
                 self.token = response.text.strip()
-                logger.debug("IIKO auth successful")
+                _token_cache[cache_key] = (
+                    self.token,
+                    now + timedelta(seconds=_TOKEN_TTL_SECONDS)
+                )
+                logger.debug("IIKO auth: new token obtained and cached for %ds", _TOKEN_TTL_SECONDS)
                 return self.token
             else:
                 logger.error(f"IIKO auth failed: {response.status_code} - {response.text}")
                 return None
-                
+
         except requests.RequestException as e:
             logger.error(f"IIKO auth connection error: {e}")
             return None
@@ -113,10 +139,13 @@ class IIKOService:
     ) -> Optional[Dict[str, Any]]:
         """
         Выполняет запрос к IIKO API с автоматической аутентификацией.
+        Токен кэшируется внутри экземпляра — повторный _auth() не вызывается,
+        если токен уже получен. Это экономит соединения (лицензия IIKO ограничена).
         """
-        # Всегда получаем новый токен (он короткоживущий)
-        if not self._auth():
-            return None
+        # Используем уже полученный токен; авторизуемся только если его ещё нет
+        if not self.token:
+            if not self._auth():
+                return None
         
         url = f"{self.base_url}{endpoint}"
         
@@ -219,7 +248,7 @@ class IIKOService:
         for row in response['data']:
             dept_id   = row.get('Department.Id', '')   # UUID — надёжный ключ
             dept_name = row.get('Department', '')       # Имя — только для логов
-            guests    = int(row.get('UniqOrderId.OrdersCount', 0))   # кол-во уникальных чеков
+            guests    = row.get('UniqOrderId.OrdersCount', 0)   # кол-во уникальных чеков
 
             if not dept_id:
                 logger.warning("IIKO OLAP: строка без Department.Id: %s", row)

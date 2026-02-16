@@ -118,16 +118,25 @@ class GeneralStatsService:
     # Основной метод Dashboard
     # ────────────────────────────────────────────
     @classmethod
-    def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None):
+    def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None,
+                            date_from=None, date_to=None):
         """
         Собирает статистику за указанный период и филиал.
 
         :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
         :param branch_id: ID филиала для фильтрации (опционально)
+        :param date_from: явная дата начала (для кастомного периода из UI)
+        :param date_to: явная дата конца (для кастомного периода из UI)
         """
-        date_from, date_to, period_code = cls.resolve_period(
-            period_code or cls.DEFAULT_PERIOD
-        )
+        # Если date_from/date_to переданы явно (кастомный период из UI) —
+        # не пересчитываем их через resolve_period, иначе они будут проигнорированы
+        # и заменены на DEFAULT_PERIOD (30d).
+        if date_from is not None and date_to is not None:
+            period_code = period_code or 'custom'
+        else:
+            date_from, date_to, period_code = cls.resolve_period(
+                period_code or cls.DEFAULT_PERIOD
+            )
 
         base_qs = ClientBranch.objects.all()
         
