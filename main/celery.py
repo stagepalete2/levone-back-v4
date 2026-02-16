@@ -26,6 +26,11 @@ app.conf.beat_schedule = {
         'task': 'apps.tenant.branch.tasks.sync_vk_messages_task',
         'schedule': crontab(minute='*/2'),
     },
+
+    'reclassify_waiting_reviews' : {
+        'task' : 'apps.tenant.branch.tasks.reclassify_waiting_reviews',
+        'schedule': crontab(minute='*/2')
+    },
     
     'rf-daily-recalculate': {
         'task': 'apps.tenant.stats.tasks.recalculate_rf_matrix_task',
@@ -36,8 +41,11 @@ app.conf.beat_schedule = {
         "task": "apps.shared.config.tasks.generate_daily_code_for_all_tenants",
         "schedule": crontab(hour=0, minute=0),
     },
+
     "dayly-rfm-analysis": {
         "task": "apps.shared.config.tasks.daily_rfm_update",
         "schedule": crontab(minute=0, hour=4),
     },
+
+    
 }

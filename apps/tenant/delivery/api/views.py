@@ -22,22 +22,40 @@ class DeliveryWebhook(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         code = serializer.validated_data['code']
-        branch_id = serializer.validated_data['branch']
+        source = serializer.validated_data['source'].lower()
+        branch_id = serializer.validated_data['branch_id']
 
-        branch = get_object_or_404(Branch, id=branch_id)
+        # Ищем Branch в зависимости от источника
+        try:
+            if source == 'dooglys':
+                branch = Branch.objects.get(dooglys_branch_id=branch_id)
+            elif source == 'iiko':
+                branch = Branch.objects.get(iiko_organization_id=branch_id)
+            else:
+                return Response({
+                    'error': 'invalid_source',
+                    'msg': 'Источник должен быть "dooglys" или "iiko"'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Branch.DoesNotExist:
+            return Response({
+                'error': 'branch_not_found',
+                'msg': f'Филиал с {source}_branch_id={branch_id} не найден'
+            }, status=status.HTTP_404_NOT_FOUND)
 
-        candidate, _ = Delivery.objects.get_or_create(
-            code = code,
-            branch = branch
+        # Создаем или получаем запись Delivery
+        candidate, created = Delivery.objects.get_or_create(
+            code=code,
+            branch=branch,
+            defaults={'order_source': source}
         )
 
-        if _:
+        if created:
             serializer = DeliveryWebhookResponseSerializer(candidate, many=False)
             return Response(serializer.data, status=status.HTTP_200_OK)
         
         return Response({
-            'error' : 'already_exist',
-            'msg' : 'Уже существует'
+            'error': 'already_exist',
+            'msg': 'Уже существует'
         }, status=status.HTTP_400_BAD_REQUEST)
 
 

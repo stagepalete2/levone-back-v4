@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # --- Orchestrators (Главные задачи-менеджеры) ---
 
-@shared_task(name="administration.tasks.generate_daily_code_for_all_tenants")
+@shared_task()
 def generate_daily_code_for_all_tenants():
     """Запускает генерацию кодов для каждого тенанта отдельно"""
     # Получаем модель тенанта динамически внутри задачи, чтобы избежать проблем при импорте
@@ -26,7 +26,7 @@ def generate_daily_code_for_all_tenants():
         # Приводим к строке для безопасности сериализации (если используете UUID)
         process_tenant_daily_codes.delay(str(tenant_id))
 
-@shared_task(name='administration.tasks.daily_rfm_update')
+@shared_task()
 def daily_rfm_update():
     """Запускает расчет RFM для каждого тенанта отдельно"""
     TenantModel = get_tenant_model()
@@ -40,7 +40,7 @@ def daily_rfm_update():
 
 # --- Workers (Задачи-исполнители для конкретного тенанта) ---
 
-@shared_task(name="administration.tasks.process_tenant_daily_codes")
+@shared_task()
 def process_tenant_daily_codes(tenant_id):
     TenantModel = get_tenant_model()
     try:
@@ -81,7 +81,7 @@ def process_tenant_daily_codes(tenant_id):
                 # Ловим ошибку конкретного филиала, чтобы не прерывать цикл для остальных
                 logger.error(f"Error generating codes for branch {branch.id} in tenant {tenant.schema_name}: {e}")
 
-@shared_task(name="administration.tasks.process_tenant_rfm")
+@shared_task()
 def process_tenant_rfm(tenant_id):
     TenantModel = get_tenant_model()
     try:

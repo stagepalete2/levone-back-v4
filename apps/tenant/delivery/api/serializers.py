@@ -9,7 +9,8 @@ class DeliveryActivationSerializer(serializers.Serializer):
 
 
 class DeliveryWebhookRequestSerializer(serializers.Serializer):
-    branch = serializers.IntegerField()
+    source = serializers.CharField(max_length=50, help_text='Источник заказа: dooglys или iiko')
+    branch_id = serializers.CharField(help_text='ID филиала из соответствующей системы')
     code = serializers.CharField()
 
 class DeliveryWebhookResponseSerializer(serializers.ModelSerializer):

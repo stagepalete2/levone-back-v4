@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from datetime import timedelta
 
 from apps.shared.config.models import TimeStampedModel
@@ -7,6 +8,7 @@ class Delivery(TimeStampedModel):
 	code = models.CharField(max_length=222, verbose_name='Уникальный код', unique=True)
 	branch = models.ForeignKey('branch.Branch', on_delete=models.CASCADE, verbose_name='Ресторан')
 	activated_by = models.ForeignKey('branch.ClientBranch', on_delete=models.CASCADE, verbose_name='Активировано пользователем', null=True, blank=True)
+	order_source = models.CharField(max_length=50, verbose_name='Источник заказа', null=True, blank=True, help_text='Источник откуда пришел заказ (например: dooglys, iiko)')
 
 	duration = models.DurationField(default=timedelta(hours=5), verbose_name='Длительность')
 
