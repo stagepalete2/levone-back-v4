@@ -127,7 +127,11 @@ class DooglysService:
                     body = response.json()
                 except ValueError:
                     body = {}
-                return body, dict(response.headers)
+                # ВАЖНО: НЕ конвертируем в dict() — requests.CaseInsensitiveDict
+                # сохраняет регистронезависимый доступ к заголовкам.
+                # HTTP/2 и большинство прокси возвращают заголовки в нижнем регистре,
+                # поэтому dict(response.headers) сломает поиск 'X-Pagination-Total-Count'.
+                return body, response.headers
 
             logger.error(
                 "DooglysService %s %s → %s: %s",
@@ -204,7 +208,7 @@ class DooglysService:
         if branch_id:
             params['branch_id'] = branch_id
 
-        result = self._make_request('GET', '/sales/order/list', params=params)
+        result = self._make_request('GET', '/api/v1/sales/order/list', params=params)
         if result is None:
             logger.warning(
                 "DooglysService: нет ответа от /sales/order/list (branch_id=%s)", branch_id
@@ -213,8 +217,19 @@ class DooglysService:
 
         _, headers = result
 
-        # Количество заказов — в заголовке пагинации
-        total_str = headers.get('X-Pagination-Total-Count', '0')
+        # Количество заказов — в заголовке пагинации.
+        # CaseInsensitiveDict (requests) обрабатывает регистр автоматически,
+        # но добавляем явный fallback на lowercase на случай нестандартных реализаций.
+        total_str = (
+            headers.get('X-Pagination-Total-Count')
+            or headers.get('x-pagination-total-count')
+            or '0'
+        )
+
+        logger.debug(
+            "DooglysService: response headers keys: %s",
+            list(headers.keys()),
+        )
         try:
             total = int(total_str)
         except (ValueError, TypeError):

@@ -254,14 +254,24 @@ class GeneralStatsService:
 
                 if getattr(branch_obj, 'iiko_organization_id', None) and \
                         branch_obj.iiko_organization_id.strip():
-                    # IIKO: поддерживает фильтрацию по датам в OLAP
+                    # IIKO: поддерживает фильтрацию по датам в OLAP.
+                    # get_olap_guests_count уже отфильтровал по department,
+                    # поэтому используем sum(values()) вместо .get(key, 0),
+                    # чтобы не зависеть от точного совпадения ключа словаря
+                    # (IIKO OLAP возвращает Department как строку-имя, а не ID).
                     try:
-                        iiko_service  = IIKOService()
-                        branch_guests = iiko_service.get_olap_guests_count(
+                        iiko_service = IIKOService()
+                        olap_result = iiko_service.get_olap_guests_count(
                             date_from=pos_date_from,
                             date_to=pos_date_to,
                             department=branch_obj.iiko_organization_id,
-                        ).get(branch_obj.iiko_organization_id, 0)
+                        )
+                        # sum() безопасен: если результат пустой — вернёт 0
+                        branch_guests = sum(olap_result.values())
+                        logger.debug(
+                            "IIKO branch %s: olap_result=%s → branch_guests=%s",
+                            branch_obj.id, olap_result, branch_guests,
+                        )
                         source_type = 'IIKO'
                     except Exception as exc:
                         logger.warning("IIKO error for branch %s: %s", branch_obj.id, exc)
@@ -274,6 +284,10 @@ class GeneralStatsService:
                             date_from=pos_date_from,
                             date_to=pos_date_to,
                             branch=branch_obj,
+                        )
+                        logger.debug(
+                            "Dooglys branch %s (dooglys_id=%s): guests=%s",
+                            branch_obj.id, branch_obj.dooglys_branch_id, branch_guests,
                         )
                         source_type = 'Dooglys'
                     except Exception as exc:

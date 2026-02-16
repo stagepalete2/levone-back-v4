@@ -163,8 +163,8 @@ class IIKOService:
             department: Фильтр по Department (iiko_organization_id)
         
         Returns:
-            Dict с ключами Department и значениями GuestNum
-            {"LevOne (Ленина)": 107, "LevOne (Набережная)": 20}
+            Dict с ключами Department.Id (UUID) и значениями UniqOrderId.OrdersCount (кол-во чеков)
+            {"7e37024d-64e4-4399-9b61-e40b0cc466cf": 107, "7b380190-5650-c31e-017c-5b33b9f90011": 20}
         """
         if not self.is_configured:
             return {}
@@ -180,16 +180,20 @@ class IIKOService:
         to_str = date_to.strftime("%Y-%m-%d")
         
         # Тело запроса OLAP
+        # UniqOrderId.OrdersCount — количество уникальных чеков/заказов.
+        # Это правильная метрика для индекса сканирования: 1 чек = 1 визит = 1 возможность скана QR.
+        # GuestNum (кол-во гостей за столиком) НЕ используем — кассиры вводят вручную,
+        # может быть 0, 1, 5 на один чек → искажает статистику в разы.
         olap_request = {
             "reportType": "SALES",
             "buildSummary": "false",
             "groupByRowFields": [
-                "OpenDate.Typed",
-                "Department"
+                "Department",
+                "Department.Id"
             ],
             "groupByColFields": [],
             "aggregateFields": [
-                "GuestNum"
+                "UniqOrderId.OrdersCount"
             ],
             "filters": {
                 "OpenDate.Typed": {
@@ -209,19 +213,26 @@ class IIKOService:
             logger.warning("IIKO OLAP: no data returned")
             return {}
         
-        # Агрегируем по Department
+        # Агрегируем по Department.Id (UUID) — именно он хранится в Branch.iiko_organization_id.
+        # Department (строка-имя) НЕ используем как ключ — она не совпадает с UUID из БД.
         result = {}
         for row in response['data']:
-            dept = row.get('Department', 'Unknown')
-            guests = row.get('GuestNum', 0)
-            
-            # Фильтр по department если указан
-            if department and department != dept:
+            dept_id   = row.get('Department.Id', '')   # UUID — надёжный ключ
+            dept_name = row.get('Department', '')       # Имя — только для логов
+            guests    = int(row.get('UniqOrderId.OrdersCount', 0))   # кол-во уникальных чеков
+
+            if not dept_id:
+                logger.warning("IIKO OLAP: строка без Department.Id: %s", row)
                 continue
-            
-            # Суммируем если уже есть (разные даты)
-            result[dept] = result.get(dept, 0) + guests
-        
+
+            # Фильтр по UUID department если указан
+            if department and department != dept_id:
+                continue
+
+            # Суммируем одинаковые dept_id (разные даты в группировке)
+            result[dept_id] = result.get(dept_id, 0) + guests
+            logger.debug('IIKO OLAP row: dept_id=%s name=%s orders=%s', dept_id, dept_name, guests)
+
         return result
     
     def get_total_guests_today(self, branch=None) -> int:
