@@ -285,7 +285,7 @@ class GeneralStatsService:
                     except Exception as exc:
                         logger.warning("IIKO error for branch %s: %s", branch_obj.id, exc)
 
-                elif getattr(branch_obj, 'dooglys_branch_id', None):
+                elif getattr(branch_obj, 'dooglas_sale_point_id', None):
                     # Dooglys: /sales/order/list с Unix Timestamps, X-Pagination-Total-Count
                     try:
                         dooglys_service = DooglysService()
@@ -296,7 +296,7 @@ class GeneralStatsService:
                         )
                         logger.debug(
                             "Dooglys branch %s (dooglys_id=%s): guests=%s",
-                            branch_obj.id, branch_obj.dooglys_branch_id, branch_guests,
+                            branch_obj.id, branch_obj.dooglas_sale_point_id, branch_guests,
                         )
                         source_type = 'Dooglys'
                     except Exception as exc:

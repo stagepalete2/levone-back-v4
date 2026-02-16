@@ -32,6 +32,14 @@ class Branch(TimeStampedModel):
         help_text='ID ресторана из Dooglys (Если у вас Dooglys, оставьте пустым IIKO)',
         unique=True
     )
+
+    dooglas_sale_point_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Sale Point ID ресторана из Dooglys',
+        unique=True
+    )
     
     def clean(self):
         '''Валидация: можно заполнить только одно из полей - iiko_organization_id или dooglys_branch_id'''

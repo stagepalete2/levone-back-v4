@@ -217,12 +217,12 @@ class DooglysService:
         }
 
         if branch_id:
-            params['branch_id'] = branch_id
+            params['sale_point_id'] = branch_id
 
         result = self._make_request('GET', '/api/v1/sales/order/list', params=params)
         if result is None:
             logger.warning(
-                "DooglysService: нет ответа от /sales/order/list (branch_id=%s)", branch_id
+                "DooglysService: нет ответа от /sales/order/list (sale_point_id=%s)", branch_id
             )
             return 0
 
