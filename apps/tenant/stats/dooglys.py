@@ -53,12 +53,23 @@ class DooglysService:
         domain = getattr(self.config, 'dooglys_tenant_domain', None)
 
         if token:
-            self.base_url = getattr(
+            raw_url = getattr(
                 self.config, 'dooglys_api_url', self.DEFAULT_API_URL
-            ).rstrip('/')
+            ) or self.DEFAULT_API_URL
+
+            # Нормализуем URL: убираем trailing slash, затем гарантируем /api/v1 в конце.
+            # Это защита от двух вариантов заполнения в конфиге:
+            #   "https://shavermaleo.dooglys.com"        → добавляем /api/v1
+            #   "https://shavermaleo.dooglys.com/api/v1" → оставляем как есть
+            raw_url = raw_url.rstrip('/')
+            if not raw_url.endswith('/api/v1'):
+                raw_url = raw_url + '/api/v1'
+
+            self.base_url = raw_url
             self.api_token = token
             self.tenant_domain = domain or ''
             self.is_configured = True
+            logger.debug("DooglysService base_url: %s", self.base_url)
         else:
             logger.warning("DooglysService: config не содержит dooglys_api_token")
 
