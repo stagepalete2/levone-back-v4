@@ -210,9 +210,9 @@ class DooglysService:
         _, end_dt      = self._day_bounds(date_to)
 
         params: dict = {
-            'date_from': self._to_unix(start_dt),
-            'date_to':   self._to_unix(end_dt),
-            'per-page':  1,          # минимум — нам важен только заголовок
+            'date_accepted_from': start_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'date_accepted_to': end_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            'per-page':  1,
             'page':      1,
         }
 
