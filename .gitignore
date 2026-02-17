@@ -64,4 +64,4 @@ media/
 
 migrations/
 
-.vscode
+.vscode*.sql
