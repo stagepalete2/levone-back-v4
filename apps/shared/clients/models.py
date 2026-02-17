@@ -17,13 +17,7 @@ class Company(TenantMixin, TimeStampedModel):
 
 	def __str__(self):
 		return self.name
-	
-	def delete(self, force_drop=False, *args, **kwargs):
-		# Удаляем схему физически из БД, минуя каскады Django ORM
-		self.drop_schema()
-		# После того как схема и все ее таблицы исчезли, удаляем саму запись тенанта
-		super().delete(force_drop, *args, **kwargs)
-	
+
 	class Meta:
 		verbose_name = 'Клиент'
 		verbose_name_plural = 'Клиенты'
