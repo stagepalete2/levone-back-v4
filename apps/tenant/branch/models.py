@@ -9,13 +9,6 @@ class Branch(TimeStampedModel):
     name = models.CharField(max_length=255, verbose_name='Название')
     description = models.TextField(null=True, blank=True, verbose_name='Описание', help_text='Для внутреннего пользования')
     
-    company = models.ForeignKey(
-        'clients.Company', 
-        on_delete=models.CASCADE, 
-        related_name='branches', 
-        verbose_name='Клиент'
-    )
-    
     # IIKO Integration: Department name from IIKO OLAP reports
     iiko_organization_id = models.CharField(
         max_length=255, 
