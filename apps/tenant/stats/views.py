@@ -1,11 +1,12 @@
 from django.shortcuts import redirect
 from django.views.generic import TemplateView, DetailView, View
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, F, Q
 from datetime import timedelta
+import json
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,7 +15,7 @@ from django.utils import timezone
 
 from apps.shared.config.sites import tenant_admin
 
-from apps.tenant.branch.models import Branch, ClientBranch, CoinTransaction
+from apps.tenant.branch.models import Branch, ClientBranch, CoinTransaction, BranchTestimonials
 
 
 from apps.tenant.game.models import ClientAttempt
@@ -265,6 +266,106 @@ class AwayView(LoginRequiredMixin, View):
         return redirect(url)
 
 
+class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView):
+    """Страница отзывов из ВК с фильтрацией по тональности"""
+    template_name = 'general/reviews_list.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        period_ctx = self.get_period_context()
+        branch_ctx = self.get_branch_context()
+        context.update(period_ctx)
+        context.update(branch_ctx)
+
+        date_from = period_ctx['date_from']
+        date_to = period_ctx['date_to']
+        branch_id = branch_ctx.get('selected_branch_id')
+
+        # Base filter
+        filters = Q()
+        if date_from:
+            filters &= Q(created_at__gte=date_from)
+        if date_to:
+            filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            filters &= Q(client__branch_id=branch_id)
+
+        all_reviews = BranchTestimonials.objects.filter(filters).select_related(
+            'client__client', 'client__branch'
+        ).order_by('-created_at')
+
+        # Sentiment filter
+        sentiment = self.request.GET.get('sentiment')
+        if sentiment in ('POSITIVE', 'NEGATIVE', 'NEUTRAL', 'SPAM'):
+            reviews = all_reviews.filter(sentiment=sentiment)
+        else:
+            sentiment = None
+            reviews = all_reviews
+
+        # Build back_params for link to statistics
+        back_parts = []
+        if branch_id:
+            back_parts.append(f'branch={branch_id}')
+        custom_from = self.request.GET.get('custom_date_from')
+        custom_to = self.request.GET.get('custom_date_to')
+        if custom_from and custom_to:
+            back_parts.append(f'custom_date_from={custom_from}')
+            back_parts.append(f'custom_date_to={custom_to}')
+        elif period_ctx['period_code'] and period_ctx['period_code'] != 'custom':
+            back_parts.append(f'period={period_ctx["period_code"]}')
+
+        # base_params for sentiment tabs (preserves period + branch)
+        base_parts = list(back_parts)
+        base_params = '&'.join(base_parts)
+
+        context.update({
+            'reviews': reviews,
+            'current_sentiment': sentiment,
+            'total_count': all_reviews.count(),
+            'positive_count': all_reviews.filter(sentiment='POSITIVE').count(),
+            'negative_count': all_reviews.filter(sentiment='NEGATIVE').count(),
+            'neutral_count': all_reviews.filter(sentiment='NEUTRAL').count(),
+            'spam_count': all_reviews.filter(sentiment='SPAM').count(),
+            'back_params': '&'.join(back_parts),
+            'base_params': base_params,
+        })
+        return context
+
+
+class ReviewReplyView(BaseAdminStatsView, View):
+    """API для отправки ответа на отзыв через VK"""
+
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+            review_id = data.get('review_id')
+            text = data.get('text', '').strip()
+
+            if not review_id or not text:
+                return JsonResponse({'success': False, 'error': 'Укажите ID отзыва и текст'}, status=400)
+
+            review = BranchTestimonials.objects.get(id=review_id)
+
+            if not review.client:
+                return JsonResponse({'success': False, 'error': 'Клиент не привязан к отзыву'}, status=400)
+
+            from apps.tenant.senler.services import VKService
+            service = VKService()
+            if not service.is_configured:
+                return JsonResponse({'success': False, 'error': 'VK не настроен'}, status=400)
+
+            service.send_message(review.client, text)
+            review.is_replied = True
+            review.save(update_fields=['is_replied'])
+
+            return JsonResponse({'success': True})
+        except BranchTestimonials.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Отзыв не найден'}, status=404)
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
 class RFAnalyticsView(BaseAdminStatsView, TemplateView):
     template_name = 'rfm/rfm_statistics.html'
 
@@ -473,3 +574,63 @@ class RFGetSegmentGuest(APIView):
                 {"error": str(e)}, 
                 status=status.HTTP_404_NOT_FOUND
             )
+
+
+class RFSegmentMailingView(APIView):
+    """
+    Отправка рассылки по сегменту RF-матрицы или по всем клиентам.
+    """
+    def post(self, request, *args, **kwargs):
+        branch_id = request.data.get('branch')
+        segment_code = request.data.get('segment_code')
+        text = request.data.get('text', '').strip()
+
+        if not branch_id or not text:
+            return Response(
+                {"success": False, "error": "Укажите branch и text"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            branch = Branch.objects.get(id=branch_id)
+            from apps.tenant.senler.services import VKService
+            service = VKService()
+            if not service.is_configured:
+                return Response({"success": False, "error": "VK не настроен"}, status=400)
+
+            if segment_code == 'all':
+                # Рассылка по всем клиентам филиала
+                clients = ClientBranch.objects.filter(
+                    branch=branch,
+                    is_allowed_message=True,
+                    client__vk_user_id__isnull=False
+                ).select_related('client')
+            else:
+                # Рассылка по сегменту
+                from apps.tenant.stats.models import GuestRFScore, RFSegment
+                segment = RFSegment.objects.get(code=segment_code)
+                scores = GuestRFScore.objects.filter(
+                    client__branch=branch,
+                    segment=segment
+                ).select_related('client__client')
+                clients = [s.client for s in scores if s.client.client and s.client.client.vk_user_id]
+
+                # Update last campaign date
+                segment.last_campaign_date = timezone.now()
+                segment.save(update_fields=['last_campaign_date'])
+
+            if not clients:
+                return Response({"success": False, "error": "Нет получателей"}, status=400)
+
+            service.send_batch_messages(clients, text)
+
+            count = len(clients) if isinstance(clients, list) else clients.count()
+            return Response({
+                "success": True,
+                "message": f"Рассылка отправлена {count} получателям"
+            })
+
+        except Branch.DoesNotExist:
+            return Response({"success": False, "error": "Филиал не найден"}, status=404)
+        except Exception as e:
+            return Response({"success": False, "error": str(e)}, status=500)

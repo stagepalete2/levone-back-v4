@@ -268,52 +268,90 @@
         color: #fff;
     }
 
-    /* ─── POS Guests by Branch Table ─── */
-    .iiko-table-container {
+    /* ─── (POS table styles removed — table moved to metrics) ─── */
+
+    /* ─── Reviews Panel ─── */
+    .reviews-panel {
         background: #ffffff;
         border: 1px solid #e0e0e0;
         border-radius: 12px;
         overflow: hidden;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        margin-bottom: 30px;
     }
 
-    .iiko-table {
-        margin-bottom: 0;
-    }
-
-    .iiko-table thead th {
+    .reviews-panel-header {
+        padding: 16px 20px;
         background: #f8f9fa;
-        border-bottom: 2px solid #eeeeee;
-        color: #666666;
-        text-transform: uppercase;
-        font-size: 0.7rem;
-        letter-spacing: 0.5px;
-        padding: 14px 16px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .reviews-panel-title {
+        font-size: 0.9rem;
         font-weight: 700;
-    }
-
-    .iiko-table tbody td {
-        padding: 16px;
-        vertical-align: middle;
-        border-bottom: 1px solid #f0f0f0;
-        font-size: 0.85rem;
-    }
-
-    .iiko-table tbody tr:hover td {
-        background-color: #fcfdfd !important;
-    }
-
-    .branch-name {
-        font-weight: 600;
         color: #333;
+        margin: 0;
+        letter-spacing: 0.5px;
     }
 
-    .guest-count {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #28a745;
+    .reviews-sentiment-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0;
     }
+
+    .sentiment-card {
+        padding: 20px 16px;
+        text-align: center;
+        text-decoration: none !important;
+        border-right: 1px solid #f0f0f0;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .sentiment-card:last-child {
+        border-right: none;
+    }
+
+    .sentiment-card:hover {
+        background: #f8f9fa;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    }
+
+    .sentiment-label {
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+
+    .sentiment-count {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+    .sentiment-positive .sentiment-label { color: #28a745; }
+    .sentiment-positive .sentiment-count { color: #28a745; }
+    .sentiment-positive:hover { background: #f0faf2; }
+
+    .sentiment-negative .sentiment-label { color: #dc3545; }
+    .sentiment-negative .sentiment-count { color: #dc3545; }
+    .sentiment-negative:hover { background: #fdf0f1; }
+
+    .sentiment-neutral .sentiment-label { color: #fd7e14; }
+    .sentiment-neutral .sentiment-count { color: #fd7e14; }
+    .sentiment-neutral:hover { background: #fff8f0; }
+
+    .sentiment-spam .sentiment-label { color: #6c757d; }
+    .sentiment-spam .sentiment-count { color: #6c757d; }
+    .sentiment-spam:hover { background: #f5f5f5; }
 </style>
 {% endblock %}
 
@@ -409,74 +447,43 @@
         {% endif %}
     </p>
 
-    {# ── POS Guests by Branch ── #}
-    {% if stats.pos_guests_by_branch %}
-        <div class="iiko-table-container mb-4">
-            <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h3 class="mb-0" style="font-size: 0.9rem; font-weight: 600; color: #333;">
-                    👥 Гости POS системы по филиалам
-                </h3>
-                {# Показываем, за какой период взяты данные из POS #}
-                <span class="badge bg-light text-dark border" style="font-size:.78rem">
-                    <i class="bi bi-calendar3"></i>
-                    {% if stats.pos_date_from and stats.pos_date_to %}
-                        {% if stats.pos_date_from == stats.pos_date_to %}
-                            {{ stats.pos_date_from }}
-                        {% else %}
-                            {{ stats.pos_date_from }} — {{ stats.pos_date_to }}
-                        {% endif %}
-                    {% else %}
-                        Сегодня
-                    {% endif %}
-                </span>
-            </div>
-            <div class="table-responsive">
-                <table class="table iiko-table align-middle">
-                    <thead>
-                        <tr>
-                            <th>Филиал</th>
-                            <th class="text-center">Источник</th>
-                            <th class="text-end">Количество гостей</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for bid, branch_data in stats.pos_guests_by_branch.items %}
-                        <tr>
-                            <td>
-                                <span class="branch-name">{{ branch_data.name }}</span>
-                            </td>
-                            <td class="text-center">
-                                {% if branch_data.source == 'IIKO' %}
-                                    <span class="badge bg-primary">IIKO</span>
-                                {% elif branch_data.source == 'Dooglys' %}
-                                    <span class="badge bg-success">Dooglys</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">—</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <span class="guest-count">{{ branch_data.count }}</span>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="3" class="text-center text-custom-muted py-4">
-                                Данные отсутствуют
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        {% if stats.pos_guests_by_branch %}
-                        <tr class="table-light">
-                            <td class="fw-bold" colspan="2">Всего:</td>
-                            <td class="text-end">
-                                <span class="guest-count">{{ stats.pos_guests_today }}</span>
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+    {# ── Таблица POS по филиалам удалена: данные уже отображены в метриках ── #}
+
+    {# ── Анализ отзывов из ВК ── #}
+    {% if stats.testimonials.total %}
+    <div class="reviews-panel mb-4">
+        <div class="reviews-panel-header">
+            <h3 class="reviews-panel-title">
+                💬 АНАЛИЗ ОТЗЫВОВ ИЗ ВК
+            </h3>
+            <span class="badge bg-light text-dark border" style="font-size:.78rem">
+                <i class="bi bi-calendar3"></i>
+                {% if custom_date_from and custom_date_to %}
+                    {{ custom_date_from }} — {{ custom_date_to }}
+                {% else %}
+                    {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
+                {% endif %}
+            </span>
         </div>
+        <div class="reviews-sentiment-grid">
+            <a href="{% url 'admin-reviews-list' %}?sentiment=POSITIVE{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-positive">
+                <div class="sentiment-label">ПОЗИТИВНЫЙ</div>
+                <div class="sentiment-count">{{ stats.testimonials.positive|default:0 }}</div>
+            </a>
+            <a href="{% url 'admin-reviews-list' %}?sentiment=NEGATIVE{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-negative">
+                <div class="sentiment-label">НЕГАТИВНЫЙ</div>
+                <div class="sentiment-count">{{ stats.testimonials.negative|default:0 }}</div>
+            </a>
+            <a href="{% url 'admin-reviews-list' %}?sentiment=NEUTRAL{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-neutral">
+                <div class="sentiment-label">ЧАСТИЧНО НЕГАТИВНЫЙ</div>
+                <div class="sentiment-count">{{ stats.testimonials.neutral|default:0 }}</div>
+            </a>
+            <a href="{% url 'admin-reviews-list' %}?sentiment=SPAM{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-spam">
+                <div class="sentiment-label">СПАМ / НЕ ПО ТЕМЕ</div>
+                <div class="sentiment-count">{{ stats.testimonials.spam|default:0 }}</div>
+            </a>
+        </div>
+    </div>
     {% endif %}
 
     <div class="dashboard-grid">
@@ -504,7 +511,7 @@
         {% endif %}
 
         <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{{ period_params }}" class="stat-card">
-            <h3>Оцифрованные гости</h3>
+            <h3>Оцифрованные гости всего</h3>
             <div class="metric">{{ stats.total_clients|default:0 }}</div>
         </a>
 
@@ -519,7 +526,7 @@
         </a>
 
         <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{{ period_params }}" class="stat-card">
-            <h3>Вернулись 2-й раз</h3>
+            <h3>Вернулись повторно</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
 
@@ -540,7 +547,7 @@
         </div>
 
         <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class='stat-card'>
-            <h3>Купили подарки</h3>
+            <h3>Купили подарки за баллы</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
@@ -550,7 +557,7 @@
         </a>
 
         <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{{ period_params }}" class="stat-card">
-            <h3>Из историй</h3>
+            <h3>Пришли из историй</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
 
@@ -587,30 +594,18 @@
 
         {% if not selected_branch %}
         <div class="stat-card">
-            <h3>📬 Подписчиков группы</h3>
+            <h3>📬 Подписались в сообщество VK</h3>
             <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
         </div>
 
         <div class="stat-card">
-            <h3>📨 Подписчиков рассылки</h3>
+            <h3>📨 Подписались на рассылку</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
         </div>
         {% endif %}
     </div>
 
-    <div class="row g-4 mb-5">
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="chart-container">
-                <h3>Источники</h3>
-                <canvas id="referralChart"></canvas>
-            </div>
-        </div>
-        <div class="col-12 col-md-6 col-lg-3">
-            <div class="chart-container">
-                <h3>Активность</h3>
-                <canvas id="activityChart"></canvas>
-            </div>
-        </div>
+    <div class="row g-4 mb-4">
         <div class="col-12 col-md-6 col-lg-3">
             <div class="chart-container">
                 <h3>Повторные визиты</h3>
@@ -619,8 +614,47 @@
         </div>
         <div class="col-12 col-md-6 col-lg-3">
             <div class="chart-container">
-                <h3>Подарки и истории</h3>
+                <h3>Источники: из кафе/из опубликованных историй</h3>
+                <canvas id="referralChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Истории: опубликовали/не опубликовали</h3>
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Подарки: только бесплатный/покупали за баллы</h3>
                 <canvas id="engagementChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Вовлеченность персонала/Качество рекламного носителя</h3>
+                <canvas id="staffEngagementChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Индекс качества: негативный/позитивный/частично негативный</h3>
+                <canvas id="qualityIndexChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Отзывы: оставили/не оставили</h3>
+                <canvas id="reviewsChart"></canvas>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="chart-container">
+                <h3>Задания: Выполняли/не выполняли</h3>
+                <canvas id="questsChart"></canvas>
             </div>
         </div>
     </div>
@@ -647,33 +681,7 @@
     const total = {{ stats.total_clients|default:0 }};
     const emptyColor = '#f0f0f0';
 
-    // Referral Chart
-    new Chart(document.getElementById('referralChart'), {
-        type: 'doughnut',
-        data: {
-            labels: ['Реферал', 'Прямые'],
-            datasets: [{
-                data: [{{ stats.clients_from_referral|default:0 }}, Math.max(total - {{ stats.clients_from_referral|default:0 }}, 0)],
-                backgroundColor: ['#28a745', emptyColor]
-            }]
-        },
-        options: { ...commonOptions, cutout: '75%' }
-    });
-
-    // Activity Chart
-    new Chart(document.getElementById('activityChart'), {
-        type: 'doughnut',
-        data: {
-            labels: ['С историей', 'Остальные'],
-            datasets: [{
-                data: [{{ stats.clients_posted_story|default:0 }}, Math.max(total - {{ stats.clients_posted_story|default:0 }}, 0)],
-                backgroundColor: ['#dc3545', emptyColor]
-            }]
-        },
-        options: { ...commonOptions, cutout: '75%' }
-    });
-
-    // Return Chart
+    // 1. Повторные визиты (на первом месте)
     new Chart(document.getElementById('returnChart'), {
         type: 'doughnut',
         data: {
@@ -686,18 +694,124 @@
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // Engagement Chart
+    // 2. Источники: из кафе/из опубликованных историй
+    new Chart(document.getElementById('referralChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Из историй', 'Из кафе'],
+            datasets: [{
+                data: [{{ stats.clients_from_referral|default:0 }}, Math.max(total - {{ stats.clients_from_referral|default:0 }}, 0)],
+                backgroundColor: ['#28a745', emptyColor]
+            }]
+        },
+        options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // 3. Истории: опубликовали/не опубликовали
+    new Chart(document.getElementById('activityChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Опубликовали', 'Не опубликовали'],
+            datasets: [{
+                data: [{{ stats.clients_posted_story|default:0 }}, Math.max(total - {{ stats.clients_posted_story|default:0 }}, 0)],
+                backgroundColor: ['#dc3545', emptyColor]
+            }]
+        },
+        options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // 4. Подарки: только бесплатный/покупали за баллы
     new Chart(document.getElementById('engagementChart'), {
         type: 'doughnut',
         data: {
-            labels: ['Подарок', 'История', 'Прочие'],
+            labels: ['Только бесплатный', 'Покупали за баллы'],
             datasets: [{
                 data: [
                     {{ stats.new_clients_received_super_prize|default:0 }},
-                    {{ stats.clients_posted_story|default:0 }},
-                    Math.max(total - {{ stats.new_clients_received_super_prize|default:0 }} - {{ stats.clients_posted_story|default:0 }}, 0)
+                    {{ stats.clients_bought_prizes|default:0 }}
                 ],
-                backgroundColor: ['#ffc107', '#6610f2', emptyColor]
+                backgroundColor: ['#ffc107', '#6610f2']
+            }]
+        },
+        options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // 5. Вовлеченность персонала/Качество рекламного носителя
+    const staffIndex = {{ stats.staff_engagement_index|default:0 }};
+    new Chart(document.getElementById('staffEngagementChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Вовлечённость', 'Остальные'],
+            datasets: [{
+                data: [staffIndex, Math.max(100 - staffIndex, 0)],
+                backgroundColor: ['#e91e63', emptyColor]
+            }]
+        },
+        options: {
+            ...commonOptions,
+            cutout: '75%',
+            plugins: {
+                ...commonOptions.plugins,
+                centerText: true
+            }
+        },
+        plugins: [{
+            id: 'centerText',
+            afterDraw(chart) {
+                const { ctx, chartArea: { width, height, top } } = chart;
+                ctx.save();
+                ctx.font = 'bold 1.5rem Inter, sans-serif';
+                ctx.fillStyle = '#e91e63';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(staffIndex + '%', width / 2, top + height / 2);
+                ctx.restore();
+            }
+        }]
+    });
+
+    // 6. Индекс качества: негативный/позитивный/частично негативный
+    const tPositive = {{ stats.testimonials.positive|default:0 }};
+    const tNegative = {{ stats.testimonials.negative|default:0 }};
+    const tNeutral = {{ stats.testimonials.neutral|default:0 }};
+    const tTotal = tPositive + tNegative + tNeutral;
+    new Chart(document.getElementById('qualityIndexChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Позитивный', 'Негативный', 'Частично негативный'],
+            datasets: [{
+                data: tTotal > 0 ? [tPositive, tNegative, tNeutral] : [0, 0, 1],
+                backgroundColor: tTotal > 0 ? ['#28a745', '#dc3545', '#fd7e14'] : [emptyColor, emptyColor, emptyColor]
+            }]
+        },
+        options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // 7. Отзывы: оставили/не оставили
+    const leftReview = {{ stats.clients_left_review|default:0 }};
+    new Chart(document.getElementById('reviewsChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Оставили', 'Не оставили'],
+            datasets: [{
+                data: [leftReview, Math.max(total - leftReview, 0)],
+                backgroundColor: ['#6f42c1', emptyColor]
+            }]
+        },
+        options: { ...commonOptions, cutout: '75%' }
+    });
+
+    // 8. Задания: Выполняли/не выполняли
+    const questsDone = {{ stats.quests_completed|default:0 }};
+    const questsNotDone = {{ stats.quests_not_completed|default:0 }};
+    const questsTotal = questsDone + questsNotDone;
+    new Chart(document.getElementById('questsChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Выполняли', 'Не выполняли'],
+            datasets: [{
+                data: questsTotal > 0 ? [questsDone, questsNotDone] : [0, 1],
+                backgroundColor: questsTotal > 0 ? ['#00bcd4', emptyColor] : [emptyColor, emptyColor]
             }]
         },
         options: { ...commonOptions, cutout: '75%' }

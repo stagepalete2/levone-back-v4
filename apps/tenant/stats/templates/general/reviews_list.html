@@ -1,0 +1,379 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* ═══ Fix: Bootstrap vs Django Admin Sidebar ═══ */
+    #container, #header, #nav-sidebar,
+    #container *, #header *, #nav-sidebar * {
+        box-sizing: content-box !important;
+    }
+    #nav-sidebar {
+        position: sticky !important; top: 0 !important;
+        max-height: 100vh !important; overflow-x: hidden !important;
+        overflow-y: auto !important; width: 275px !important; flex-shrink: 0 !important;
+    }
+    #nav-sidebar ul { padding-left: 0; margin-bottom: 0; list-style: none; }
+    #nav-sidebar li { list-style: none; }
+    #content, #content * { box-sizing: border-box !important; }
+
+    /* ─── Page layout ─── */
+    .reviews-page { background: #f4f7f6; min-height: 100vh; }
+
+    .page-header {
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 12px; margin-bottom: 24px;
+    }
+    .page-title {
+        font-size: 1.5rem; font-weight: 700; color: #333;
+        display: flex; align-items: center; gap: 12px;
+    }
+
+    /* ─── Sentiment filter tabs ─── */
+    .sentiment-tabs {
+        display: inline-flex; gap: 0; background: #fff;
+        border: 1px solid #e0e0e0; border-radius: 10px;
+        overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .sentiment-tabs a {
+        padding: 10px 18px; font-size: 0.8rem; font-weight: 600;
+        color: #555; text-decoration: none; border-right: 1px solid #e8e8e8;
+        transition: all 0.15s; white-space: nowrap;
+    }
+    .sentiment-tabs a:last-child { border-right: none; }
+    .sentiment-tabs a:hover { background: #f0f0f0; }
+    .sentiment-tabs a.active-all { background: #333; color: #fff; }
+    .sentiment-tabs a.active-positive { background: #28a745; color: #fff; }
+    .sentiment-tabs a.active-negative { background: #dc3545; color: #fff; }
+    .sentiment-tabs a.active-neutral { background: #fd7e14; color: #fff; }
+    .sentiment-tabs a.active-spam { background: #6c757d; color: #fff; }
+
+    /* ─── Review card ─── */
+    .review-card {
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 12px;
+        padding: 0; margin-bottom: 16px; overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: all 0.15s;
+    }
+    .review-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+    .review-card-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+        background: #fafafa; flex-wrap: wrap; gap: 8px;
+    }
+    .review-sender {
+        font-weight: 700; font-size: 0.95rem; color: #333;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .review-meta { display: flex; align-items: center; gap: 12px; }
+    .review-date { font-size: 0.78rem; color: #999; }
+
+    .sentiment-badge {
+        padding: 4px 12px; border-radius: 20px; font-size: 0.7rem;
+        font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .sentiment-badge.POSITIVE { background: #e8f5e9; color: #2e7d32; }
+    .sentiment-badge.NEGATIVE { background: #ffebee; color: #c62828; }
+    .sentiment-badge.NEUTRAL { background: #fff3e0; color: #e65100; }
+    .sentiment-badge.SPAM { background: #f5f5f5; color: #757575; }
+    .sentiment-badge.WAITING { background: #e3f2fd; color: #1565c0; }
+
+    .review-card-body { padding: 20px; }
+    .review-text { font-size: 0.92rem; color: #333; line-height: 1.6; margin: 0; }
+    .ai-comment {
+        margin-top: 12px; padding: 10px 14px; background: #f8f9fa;
+        border-radius: 8px; font-size: 0.82rem; color: #666;
+        border-left: 3px solid #6f42c1;
+    }
+
+    .review-card-footer {
+        padding: 12px 20px; border-top: 1px solid #f0f0f0;
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 8px;
+    }
+
+    .replied-badge {
+        font-size: 0.78rem; color: #28a745; font-weight: 600;
+        display: flex; align-items: center; gap: 4px;
+    }
+
+    /* ─── Reply section ─── */
+    .reply-section {
+        border-top: 1px solid #f0f0f0; padding: 20px;
+        background: #fafbfc; display: none;
+    }
+    .reply-section.open { display: block; }
+
+    .reply-textarea {
+        width: 100%; min-height: 100px; border: 1px solid #ddd;
+        border-radius: 8px; padding: 12px; font-size: 0.9rem;
+        resize: vertical; transition: border-color 0.15s;
+    }
+    .reply-textarea:focus { outline: none; border-color: #28a745; box-shadow: 0 0 0 2px rgba(40,167,69,0.1); }
+
+    .reply-actions {
+        display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;
+    }
+
+    .btn-send {
+        background: #28a745; color: #fff; border: none; border-radius: 8px;
+        padding: 8px 20px; font-size: 0.85rem; font-weight: 600;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .btn-send:hover { background: #218838; transform: translateY(-1px); }
+    .btn-send:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .btn-ai-generate {
+        background: #6f42c1; color: #fff; border: none; border-radius: 8px;
+        padding: 8px 16px; font-size: 0.85rem; font-weight: 600;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .btn-ai-generate:hover { background: #5a32a3; transform: translateY(-1px); }
+
+    .btn-reply-toggle {
+        background: none; border: 1px solid #ddd; border-radius: 8px;
+        padding: 6px 14px; font-size: 0.82rem; font-weight: 600; color: #555;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .btn-reply-toggle:hover { border-color: #28a745; color: #28a745; background: #f0faf2; }
+
+    .btn-vk-profile {
+        background: none; border: 1px solid #4c6ea4; border-radius: 8px;
+        padding: 6px 14px; font-size: 0.82rem; font-weight: 600; color: #4c6ea4;
+        cursor: pointer; transition: all 0.15s; text-decoration: none;
+    }
+    .btn-vk-profile:hover { background: #4c6ea4; color: #fff; }
+
+    .loading-spinner { display: none; font-size: 0.82rem; color: #6f42c1; }
+    .status-msg { font-size: 0.82rem; margin-top: 8px; }
+    .status-msg.success { color: #28a745; }
+    .status-msg.error { color: #dc3545; }
+
+    .empty-state {
+        text-align: center; padding: 60px 20px; color: #999;
+    }
+    .empty-state i { font-size: 3rem; margin-bottom: 12px; display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-4 reviews-page">
+
+    {# ── Breadcrumbs ── #}
+    <nav aria-label="breadcrumb" style="margin-bottom: 16px;">
+        <ol class="breadcrumb" style="background: none; padding: 0; margin: 0; font-size: 0.82rem;">
+            <li class="breadcrumb-item"><a href="{% url 'admin:index' %}" style="color: #28a745;">Домой</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'admin-statistics' %}" style="color: #28a745;">Общая статистика</a></li>
+            <li class="breadcrumb-item active" style="color: #999;">Отзывы из ВК</li>
+        </ol>
+    </nav>
+
+    <div class="page-header">
+        <h1 class="page-title">
+            <span style="background: rgba(40, 167, 69, 0.1); padding: 4px; border-radius: 8px;">💬</span>
+            Отзывы из ВК
+            <span style="font-size: 0.85rem; color: #999; font-weight: 400;">({{ reviews.count }})</span>
+        </h1>
+        <a href="{% url 'admin-statistics' %}?{{ back_params }}" class="btn-reply-toggle">
+            <i class="bi bi-arrow-left"></i> Назад к статистике
+        </a>
+    </div>
+
+    {# ── Sentiment filter ── #}
+    <div class="sentiment-tabs">
+        <a href="?{{ base_params }}"
+           class="{% if not current_sentiment %}active-all{% endif %}">
+            Все ({{ total_count }})
+        </a>
+        <a href="?sentiment=POSITIVE&{{ base_params }}"
+           class="{% if current_sentiment == 'POSITIVE' %}active-positive{% endif %}">
+            ✅ Позитивные ({{ positive_count }})
+        </a>
+        <a href="?sentiment=NEGATIVE&{{ base_params }}"
+           class="{% if current_sentiment == 'NEGATIVE' %}active-negative{% endif %}">
+            ❌ Негативные ({{ negative_count }})
+        </a>
+        <a href="?sentiment=NEUTRAL&{{ base_params }}"
+           class="{% if current_sentiment == 'NEUTRAL' %}active-neutral{% endif %}">
+            ⚠️ Частично негативные ({{ neutral_count }})
+        </a>
+        <a href="?sentiment=SPAM&{{ base_params }}"
+           class="{% if current_sentiment == 'SPAM' %}active-spam{% endif %}">
+            🚫 Спам ({{ spam_count }})
+        </a>
+    </div>
+
+    {# ── Reviews list ── #}
+    {% for review in reviews %}
+    <div class="review-card" id="review-{{ review.id }}">
+        <div class="review-card-header">
+            <div class="review-sender">
+                <i class="bi bi-person-circle" style="font-size: 1.2rem; color: #999;"></i>
+                {% if review.client %}
+                    {{ review.client.client.name|default:"" }} {{ review.client.client.lastname|default:"" }}
+                {% elif review.vk_sender_id %}
+                    VK ID: {{ review.vk_sender_id }}
+                {% else %}
+                    Аноним
+                {% endif %}
+                {% if review.client and review.client.branch %}
+                    <span style="font-size: 0.75rem; color: #999; font-weight: 400;">· {{ review.client.branch.name }}</span>
+                {% endif %}
+            </div>
+            <div class="review-meta">
+                <span class="sentiment-badge {{ review.sentiment }}">{{ review.get_sentiment_display }}</span>
+                <span class="review-date">{{ review.created_at|date:"d.m.Y H:i" }}</span>
+            </div>
+        </div>
+
+        <div class="review-card-body">
+            <p class="review-text">{{ review.review }}</p>
+            {% if review.ai_comment %}
+                <div class="ai-comment">
+                    <strong>🤖 ИИ:</strong> {{ review.ai_comment }}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="review-card-footer">
+            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                {% if review.is_replied %}
+                    <span class="replied-badge"><i class="bi bi-check-circle-fill"></i> Ответ отправлен</span>
+                {% endif %}
+                <button class="btn-reply-toggle" onclick="toggleReply({{ review.id }})">
+                    <i class="bi bi-reply"></i> Ответить
+                </button>
+                {% if review.vk_sender_id %}
+                    <a href="{% url 'away' review.vk_sender_id %}" target="_blank" class="btn-vk-profile">
+                        <i class="bi bi-box-arrow-up-right"></i> Профиль VK
+                    </a>
+                {% endif %}
+            </div>
+            <div style="font-size: 0.75rem; color: #bbb;">
+                {{ review.source }}
+                {% if review.rating %} · ⭐ {{ review.rating }}/5{% endif %}
+            </div>
+        </div>
+
+        {# ── Reply section (hidden by default) ── #}
+        <div class="reply-section" id="reply-section-{{ review.id }}">
+            <textarea class="reply-textarea" id="reply-text-{{ review.id }}"
+                      placeholder="Напишите ответ гостю..."></textarea>
+            <div class="reply-actions">
+                <button class="btn-send" onclick="sendReply({{ review.id }})" id="btn-send-{{ review.id }}">
+                    <i class="bi bi-send"></i> Отправить
+                </button>
+                <button class="btn-ai-generate" onclick="generateAI({{ review.id }}, '{{ review.review|escapejs }}', {{ review.rating|default:5 }})">
+                    ✨ Сгенерировать (AI)
+                </button>
+                <span class="loading-spinner" id="loading-{{ review.id }}">
+                    <i class="bi bi-arrow-repeat"></i> Генерация...
+                </span>
+            </div>
+            <div class="status-msg" id="status-{{ review.id }}"></div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <i class="bi bi-chat-left-dots"></i>
+        <p>Отзывов с таким фильтром не найдено</p>
+    </div>
+    {% endfor %}
+
+</div>
+
+<script>
+    function toggleReply(id) {
+        const section = document.getElementById('reply-section-' + id);
+        section.classList.toggle('open');
+        if (section.classList.contains('open')) {
+            section.querySelector('textarea').focus();
+        }
+    }
+
+    function showStatus(id, msg, type) {
+        const el = document.getElementById('status-' + id);
+        el.textContent = msg;
+        el.className = 'status-msg ' + type;
+        if (type === 'success') {
+            setTimeout(() => { el.textContent = ''; }, 4000);
+        }
+    }
+
+    function sendReply(reviewId) {
+        const textarea = document.getElementById('reply-text-' + reviewId);
+        const text = textarea.value.trim();
+        if (!text) { showStatus(reviewId, 'Введите текст ответа', 'error'); return; }
+
+        const btn = document.getElementById('btn-send-' + reviewId);
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Отправка...';
+
+        fetch('{% url "admin-review-reply" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ review_id: reviewId, text: text })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showStatus(reviewId, '✅ Ответ отправлен!', 'success');
+                textarea.value = '';
+                // Update badge
+                const card = document.getElementById('review-' + reviewId);
+                const footer = card.querySelector('.review-card-footer > div');
+                if (!footer.querySelector('.replied-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'replied-badge';
+                    badge.innerHTML = '<i class="bi bi-check-circle-fill"></i> Ответ отправлен';
+                    footer.prepend(badge);
+                }
+            } else {
+                showStatus(reviewId, '❌ ' + (data.error || 'Ошибка'), 'error');
+            }
+        })
+        .catch(() => showStatus(reviewId, '❌ Ошибка сети', 'error'))
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-send"></i> Отправить';
+        });
+    }
+
+    function generateAI(reviewId, reviewText, rating) {
+        const loading = document.getElementById('loading-' + reviewId);
+        const textarea = document.getElementById('reply-text-' + reviewId);
+        loading.style.display = 'inline';
+
+        fetch('{% url "generate_review_reply" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                review_text: reviewText,
+                review_rating: rating,
+                draft_text: textarea.value
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.reply) {
+                textarea.value = data.reply;
+                textarea.focus();
+            } else {
+                showStatus(reviewId, '❌ ' + (data.error || 'Ошибка генерации'), 'error');
+            }
+        })
+        .catch(() => showStatus(reviewId, '❌ Ошибка сети', 'error'))
+        .finally(() => { loading.style.display = 'none'; });
+    }
+</script>
+{% endblock %}

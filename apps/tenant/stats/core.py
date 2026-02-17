@@ -321,6 +321,58 @@ class GeneralStatsService:
         except Exception as exc:
             logger.error("POS systems integration error: %s", exc)
 
+        # ── Задания (Квесты) ──
+        quests_completed = 0
+        quests_not_completed = 0
+        try:
+            from apps.tenant.quest.models import QuestSubmit
+            qs_filters = Q()
+            if date_from:
+                qs_filters &= Q(created_at__gte=date_from)
+            if branch_id:
+                qs_filters &= Q(client__branch_id=branch_id)
+            quest_qs = QuestSubmit.objects.filter(qs_filters)
+            quests_completed = quest_qs.filter(is_complete=True).values('client').distinct().count()
+            quests_not_completed = quest_qs.filter(is_complete=False).values('client').distinct().count()
+        except Exception as e:
+            logger.warning("Quest stats error: %s", e)
+
+        # ── Клиенты, оставившие отзывы ──
+        clients_left_review = 0
+        try:
+            from apps.tenant.branch.models import BranchTestimonials as BT
+            rev_filters = Q()
+            if date_from:
+                rev_filters &= Q(created_at__gte=date_from)
+            if branch_id:
+                rev_filters &= Q(client__branch_id=branch_id)
+            clients_left_review = BT.objects.filter(rev_filters, client__isnull=False).values('client').distinct().count()
+        except Exception as e:
+            logger.warning("Review clients count error: %s", e)
+
+        # ── Анализ отзывов из ВК ──
+        testimonials_stats = {}
+        try:
+            from apps.tenant.branch.models import BranchTestimonials
+            t_filters = Q()
+            if date_from:
+                t_filters &= Q(created_at__gte=date_from)
+            if date_to:
+                t_filters &= Q(created_at__lte=date_to)
+            if branch_id:
+                t_filters &= Q(client__branch_id=branch_id)
+
+            t_qs = BranchTestimonials.objects.filter(t_filters)
+            testimonials_stats = {
+                'total': t_qs.count(),
+                'positive': t_qs.filter(sentiment='POSITIVE').count(),
+                'negative': t_qs.filter(sentiment='NEGATIVE').count(),
+                'neutral': t_qs.filter(sentiment='NEUTRAL').count(),
+                'spam': t_qs.filter(sentiment='SPAM').count(),
+            }
+        except Exception as e:
+            logger.warning("Testimonials stats error: %s", e)
+
         return {
             "total_clients": total_clients,
             "total_clients_period": total_clients_period,
@@ -339,14 +391,17 @@ class GeneralStatsService:
             "mailing_subscribers": mailing_subscribers,
             "qr_scans_today": qr_scans_today,
             "pos_guests_today": pos_guests_today,
-            "iiko_guests_today": pos_guests_today,  # Для обратной совместимости
-            "pos_guests_by_branch": guests_by_branch,  # Детализация по филиалам (IIKO + Dooglys)
-            "iiko_guests_by_branch": guests_by_branch,  # Для обратной совместимости
+            "iiko_guests_today": pos_guests_today,
+            "pos_guests_by_branch": guests_by_branch,
+            "iiko_guests_by_branch": guests_by_branch,
             "scan_index": scan_index,
             "open_rate": open_rate,
-            # Период, за который считались POS-данные (для отображения в шаблоне)
             "pos_date_from": locals().get('pos_date_from'),
             "pos_date_to":   locals().get('pos_date_to'),
+            "testimonials": testimonials_stats,
+            "quests_completed": quests_completed,
+            "quests_not_completed": quests_not_completed,
+            "clients_left_review": clients_left_review,
         }
 
 class RFAnalyticsService:

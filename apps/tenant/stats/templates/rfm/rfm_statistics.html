@@ -2,128 +2,62 @@
 {% load i18n static %}
 
 {% block extrastyle %}
-    {{ block.super }}
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        /* Основной фон контента в светлой теме */
-        #content {
-            background-color: #f4f7f6 !important;
-            color: #333 !important;
-            min-height: 100vh;
-            padding: 20px !important;
-        }
+{{ block.super }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    #container, #header, #nav-sidebar, #container *, #header *, #nav-sidebar * { box-sizing: content-box !important; }
+    #nav-sidebar { position: sticky !important; top: 0 !important; max-height: 100vh !important; overflow-x: hidden !important; overflow-y: auto !important; width: 275px !important; flex-shrink: 0 !important; }
+    #nav-sidebar ul { padding-left: 0; margin-bottom: 0; list-style: none; }
+    #nav-sidebar li { list-style: none; }
+    #content, #content * { box-sizing: border-box !important; }
+    #content { background-color: #f4f7f6 !important; color: #333 !important; min-height: 100vh; padding: 20px !important; }
 
-        /* Оформление карточек выбора ресторана */
-        .branch-card {
-            background: #ffffff;
-            border: 1px solid #e0e0e0 !important;
-            border-radius: 12px;
-            padding: 24px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.03);
-            height: 100%;
-        }
+    .page-header { margin-bottom: 32px; }
+    .page-header h1 { font-size: 1.6rem; font-weight: 800; color: #1B2838; display: flex; align-items: center; gap: 10px; }
 
-        .branch-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 20px rgba(0,0,0,0.08) !important;
-            border-color: #28a745 !important; /* Зеленый акцент при наведении */
-        }
+    .branch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; margin-bottom: 40px; }
+    .branch-card { background: #fff; border: 2px solid #e8e8e8; border-radius: 16px; padding: 28px 24px; transition: all 0.25s ease; display: flex; flex-direction: column; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
+    .branch-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.1); border-color: #C9A227; }
+    .branch-icon { width: 56px; height: 56px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; margin-bottom: 16px; }
+    .branch-icon.cafe { background: linear-gradient(135deg, #e8f5e9, #c8e6c9); }
+    .branch-icon.alt { background: linear-gradient(135deg, #e3f2fd, #bbdefb); }
+    .branch-name { font-size: 1.15rem; font-weight: 700; color: #1B2838; margin-bottom: 20px; text-align: center; }
 
-        /* Цветовые вариации иконок */
-        .icon-wrapper {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8rem;
-            margin-bottom: 16px;
-        }
-        .bg-light-blue { background-color: #e3f2fd; }
-        .bg-light-green { background-color: #e8f5e9; }
-
-        .branch-title {
-            font-weight: 700;
-            font-size: 1.15rem;
-            color: #212529;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        /* Стили кнопок */
-        .btn-action {
-            font-size: 0.85rem;
-            font-weight: 600;
-            padding: 10px 15px;
-            width: 100%;
-            border-radius: 8px;
-            transition: 0.2s;
-        }
-        
-        /* Хлебные крошки в стиле ваших страниц */
-        .breadcrumbs {
-            background: #ffffff;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 12px 24px;
-            font-size: 13px;
-            color: #666;
-        }
-        .breadcrumbs a { color: #28a745; text-decoration: none; }
-    </style>
+    .btn-group-v { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .btn-rf { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; text-decoration: none !important; transition: all 0.15s; border: none; cursor: pointer; text-align: left; }
+    .btn-rf i { font-size: 1rem; }
+    .btn-rf-primary { background: #C9A227; color: #fff; }
+    .btn-rf-primary:hover { background: #b8931f; color: #fff; transform: translateX(2px); }
+    .btn-rf-success { background: #28a745; color: #fff; }
+    .btn-rf-success:hover { background: #218838; color: #fff; transform: translateX(2px); }
+    .btn-rf-disabled { background: #f0f0f0; color: #aaa; cursor: not-allowed; }
+    .badge-soon { background: #C9A227; color: #fff; font-size: 0.6rem; padding: 2px 8px; border-radius: 10px; margin-left: auto; font-weight: 700; }
+    .divider-label { font-size: 0.7rem; color: #999; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin: 8px 0 4px; padding-left: 4px; }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row mb-4 align-items-center">
-        <div class="col-12">
-            <h1 class="h3 fw-bold mb-1" style="color: #212529;">
-                <span style="color: #28a745;">📊</span> Выберите ресторан для анализа
-            </h1>
-            <p class="text-muted small">Нажмите на кнопку ниже, чтобы открыть детальную статистику или историю миграции филиала</p>
-        </div>
+    <div class="page-header">
+        <h1><span style="background: rgba(201,162,39,0.12); padding: 6px; border-radius: 10px;">📊</span> Выберите ресторан для анализа</h1>
+        <p class="text-muted small mt-1 mb-0">Нажмите на кнопку ниже, чтобы открыть детальную статистику или историю миграции филиала</p>
     </div>
-
-    <div class="row g-4">
+    <div class="branch-grid">
         {% for branch in branches %}
-        <div class="col-12 col-md-6 col-lg-4 col-xl-3">
-            <div class="branch-card">
-                <div class="icon-wrapper {% cycle 'bg-light-blue' 'bg-light-green' %}">
-                    {% if forloop.counter|divisibleby:2 %}📍{% else %}🏠{% endif %}
-                </div>
-                
-                <div class="branch-title">{{ branch.name }}</div>
-                
-                <div class="w-100 d-grid gap-2">
-                    <a href="{% url 'rf-detail-statistics' id=branch.id %}" class="btn btn-primary btn-action shadow-sm text-dark">
-                        <i class="bi bi-matrix me-2"></i>RFM-анализ
-                    </a>
-                    <a href="{% url 'rf-migration-statistics' id=branch.id %}" class="btn btn-success btn-action shadow-sm text-dark" style="background-color: #28a745; border-color: #28a745;">
-                        <i class="bi bi-clock-history me-2"></i>История миграции
-                    </a>
-                    <hr>
-                    <a href="{% url 'delivery-rf-statistics' id=branch.id %}" class="btn btn-primary btn-action shadow-sm text-dark">
-                        <i class="bi bi-matrix me-2"></i>RFM-анализ доставки
-                    </a>
-                    <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn btn-success btn-action shadow-sm text-dark" style="background-color: #28a745; border-color: #28a745;">
-                        <i class="bi bi-clock-history me-2"></i>История миграции доставки
-                    </a>
-                    
-                </div>
+        <div class="branch-card">
+            <div class="branch-icon {% cycle 'cafe' 'alt' %}">{% if forloop.counter|divisibleby:2 %}📍{% else %}🏠{% endif %}</div>
+            <div class="branch-name">{{ branch.name }}</div>
+            <div class="btn-group-v">
+                <a href="{% url 'rf-detail-statistics' id=branch.id %}" class="btn-rf btn-rf-primary"><i class="bi bi-grid-3x3-gap"></i> RF-анализ (сканирования)</a>
+                <a href="{% url 'rf-migration-statistics' id=branch.id %}" class="btn-rf btn-rf-success"><i class="bi bi-clock-history"></i> История миграции</a>
+                <div class="divider-label">Доставка</div>
+                <a href="{% url 'delivery-rf-statistics' id=branch.id %}" class="btn-rf btn-rf-primary"><i class="bi bi-truck"></i> RF-анализ доставки</a>
+                <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn-rf btn-rf-success"><i class="bi bi-clock-history"></i> История миграции доставки</a>
             </div>
         </div>
         {% empty %}
-        <div class="col-12 text-center py-5">
-            <div class="text-muted fs-2 mb-3">🏚️</div>
-            <h5 class="text-muted">Рестораны пока не добавлены</h5>
-        </div>
+        <div class="text-center py-5" style="grid-column: 1/-1;"><div class="text-muted fs-2 mb-3">🏚️</div><h5 class="text-muted">Рестораны пока не добавлены</h5></div>
         {% endfor %}
     </div>
 </div>

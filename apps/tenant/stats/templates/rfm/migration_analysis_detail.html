@@ -88,44 +88,7 @@
         </div>
     </div>
 
-    <h5 class="fw-bold mb-3 mt-5">Последние изменения статусов</h5>
-    <div class="row g-4 mb-5">
-        {% for guest in recent_guests|slice:":3" %}
-        <div class="col-md-4">
-            <div class="guest-card">
-                <div class="d-flex align-items-center gap-3 mb-3">
-                    <div class="rounded-circle bg-light d-flex align-items-center justify-content-center fw-bold text-primary border" style="width: 40px; height: 40px;">
-                        {{ guest.info.client.name|slice:":1" }}
-                    </div>
-                    <div>
-                        <div class="fw-bold">{{ guest.info.client.name }} {{ guest.info.client.lastname }}</div>
-                        <a href="https://vk.com/id{{ guest.info.client.vk_user_id }}" target="_blank" class="small text-decoration-none">Профиль VK</a>
-                    </div>
-                </div>
-                
-                <div class="alert alert-light border text-center py-2 mb-3">
-                    <small class="text-muted d-block">ТЕКУЩИЙ СТАТУС</small>
-                    <span class="fw-bold" style="color: {{ guest.current.segment.color }}">{{ guest.current.segment.name }}</span>
-                </div>
-
-                <div class="timeline">
-                    {% for log in guest.history %}
-                    <div class="timeline-item {% if log.to_segment.code > log.from_segment.code %}growth{% else %}churn{% endif %}">
-                        <div class="small text-muted">{{ log.migrated_at|date:"d.m.Y" }}</div>
-                        <div class="small fw-bold">
-                            {{ log.from_segment.code }} → {{ log.to_segment.code }}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-        {% empty %}
-        <div class="col-12 text-center text-muted py-5">
-            За выбранный период миграций не зафиксировано
-        </div>
-        {% endfor %}
-    </div>
+    {# ── Раздел «Последние изменения статусов» удалён — неинформативен для клиента ── #}
 
     <div class="content-card">
         <h5 class="fw-bold mb-4">Эффективность за период</h5>
