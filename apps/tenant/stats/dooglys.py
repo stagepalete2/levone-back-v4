@@ -179,8 +179,23 @@ class DooglysService:
         self,
         date_from: date = None,
         date_to: date = None,
-        branch_id: str = None,
+        branch_id: int = None,
     ) -> int:
+        """
+        Возвращает количество заказов (чеков) за период через /sales/order/list.
+
+        Dooglys использует пагинацию; реальное количество записей
+        возвращается в заголовке ответа X-Pagination-Total-Count —
+        именно его мы и возвращаем (без необходимости обходить все страницы).
+
+        Args:
+            date_from: Дата начала периода (включительно). По умолчанию — сегодня.
+            date_to:   Дата конца периода (включительно). По умолчанию — сегодня.
+            branch_id: Внутренний Dooglys branch_id для фильтрации по филиалу.
+
+        Returns:
+            Количество заказов (int). 0 при ошибке или отсутствии данных.
+        """
         if not self.is_configured:
             return 0
 
@@ -190,15 +205,14 @@ class DooglysService:
         if date_to is None:
             date_to = today
 
-        # Получаем границы дня
-        start_dt, _ = self._day_bounds(date_from)
-        _, end_dt = self._day_bounds(date_to)
+        # Формируем Unix Timestamps: начало date_from … конец date_to
+        start_dt, _    = self._day_bounds(date_from)
+        _, end_dt      = self._day_bounds(date_to)
 
-        # Передаем даты строкой, как ожидает Dooglys
         params: dict = {
-            'date_accepted_from': start_dt.strftime('%Y-%m-%d %H:%M:%S'),
-            'date_accepted_to': end_dt.strftime('%Y-%m-%d %H:%M:%S'),
-            'per-page':  1,
+            'date_from': self._to_unix(start_dt),
+            'date_to':   self._to_unix(end_dt),
+            'per-page':  1,          # минимум — нам важен только заголовок
             'page':      1,
         }
 
@@ -216,12 +230,19 @@ class DooglysService:
 
         _, headers = result
 
+        # Количество заказов — в заголовке пагинации.
+        # CaseInsensitiveDict (requests) обрабатывает регистр автоматически,
+        # но добавляем явный fallback на lowercase на случай нестандартных реализаций.
         total_str = (
             headers.get('X-Pagination-Total-Count')
             or headers.get('x-pagination-total-count')
             or '0'
         )
 
+        logger.debug(
+            "DooglysService: response headers keys: %s",
+            list(headers.keys()),
+        )
         try:
             total = int(total_str)
         except (ValueError, TypeError):
@@ -277,8 +298,8 @@ class DooglysService:
             Количество заказов (int).
         """
         branch_id = None
-        if branch and getattr(branch, 'dooglas_sale_point_id', None):
-            branch_id = branch.dooglas_sale_point_id
+        if branch and getattr(branch, 'dooglys_branch_id', None):
+            branch_id = branch.dooglys_branch_id
 
         today = date.today()
         return self.get_orders_count(
@@ -305,8 +326,8 @@ class DooglysService:
             Количество заказов (int).
         """
         branch_id = None
-        if branch and getattr(branch, 'dooglas_sale_point_id', None):
-            branch_id = branch.dooglas_sale_point_id
+        if branch and getattr(branch, 'dooglys_branch_id', None):
+            branch_id = branch.dooglys_branch_id
 
         return self.get_orders_count(
             date_from=date_from,
