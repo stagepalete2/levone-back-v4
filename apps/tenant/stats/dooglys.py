@@ -290,14 +290,14 @@ class DooglysService:
         Возвращает количество заказов (гостей) за СЕГОДНЯ.
 
         Args:
-            branch: Branch instance. Используется branch.dooglys_branch_id для фильтрации.
+            branch: Branch instance. Используется branch.dooglas_sale_point_id для фильтрации.
 
         Returns:
             Количество заказов (int).
         """
         branch_id = None
-        if branch and getattr(branch, 'dooglys_branch_id', None):
-            branch_id = branch.dooglys_branch_id
+        if branch and getattr(branch, 'dooglas_sale_point_id', None):
+            branch_id = branch.dooglas_sale_point_id
 
         today = date.today()
         return self.get_orders_count(
@@ -324,8 +324,8 @@ class DooglysService:
             Количество заказов (int).
         """
         branch_id = None
-        if branch and getattr(branch, 'dooglys_branch_id', None):
-            branch_id = branch.dooglys_branch_id
+        if branch and getattr(branch, 'dooglas_sale_point_id', None):
+            branch_id = branch.dooglas_sale_point_id
 
         return self.get_orders_count(
             date_from=date_from,
