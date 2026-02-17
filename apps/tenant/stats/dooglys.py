@@ -219,9 +219,7 @@ class DooglysService:
         if branch_id:
             params['sale_point_id'] = branch_id
 
-        # Убран двойной слеш /api/v1
         result = self._make_request('GET', '/api/v1/sales/order/list', params=params)
-        
         if result is None:
             logger.warning(
                 "DooglysService: нет ответа от /sales/order/list (sale_point_id=%s)", branch_id
