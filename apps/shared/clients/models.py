@@ -13,7 +13,7 @@ class Company(TenantMixin, TimeStampedModel):
 
 	auto_create_schema = True
 
-	auto_drop_schema = False
+	auto_drop_schema = True
 
 	def __str__(self):
 		return self.name
