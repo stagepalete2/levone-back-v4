@@ -27,19 +27,17 @@ VK_MINI_APP_ID = getattr(settings, 'VK_MINI_APP_ID', '0')
 
 
 class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
-    company_field_name = 'company'
     branch_field_name = None
 
-    list_display = ('name', 'id', 'company', 'iiko_organization_id', 'get_vk_app_link', 'get_qr_code_btn', 'created_at')
+    list_display = ('name', 'id', 'iiko_organization_id', 'get_vk_app_link', 'get_qr_code_btn', 'created_at')
 
-    list_filter = ('company',)
     search_fields = ('name',)
     inlines = [BranchConfigInline]
     readonly_fields = ('get_vk_app_link_detail', 'get_qr_code_btn_detail')
 
     def _get_vk_url(self, obj):
         from django.db import connection
-        company_slug = getattr(connection, 'schema_name', 'company')
+        company_slug = getattr(connection, 'schema_name',)
         table = obj.vk_mini_app_table or 1
         return 'https://vk.com/app{}#company={}&branch={}&table={}'.format(
             VK_MINI_APP_ID, company_slug, obj.id, table
