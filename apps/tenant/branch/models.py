@@ -34,26 +34,15 @@ class Branch(TimeStampedModel):
         unique=True
     )
 
-    vk_mini_app_link = models.CharField(
-        max_length=500,
-        blank=True,
-        null=True,
-        verbose_name='Ссылка на VK Мини-Апп',
-        help_text='Автоматически генерируется при указании номера стола. Формат: https://vk.com/app...'
-    )
-
-    vk_mini_app_table = models.PositiveIntegerField(
-        blank=True,
-        null=True,
-        verbose_name='Номер стола (для QR-кода VK)',
-        help_text='Укажите номер стола для генерации ссылки и QR-кода VK Мини-Апп'
-    )
+    # NOTE: VK Mini-App fields (vk_mini_app_link, vk_mini_app_table) removed from Branch.
+    # vk_mini_app_id is now stored in CompanyConfig.
+    # The link is generated dynamically in admin without saving to DB —
+    # the user enters the table number manually each time they need a link/QR.
     
     def clean(self):
         '''Валидация: можно заполнить только одно из полей - iiko_organization_id или dooglys_branch_id'''
         super().clean()
         
-        # Проверяем, что заполнено не более одного поля
         has_iiko = bool(self.iiko_organization_id and self.iiko_organization_id.strip())
         has_dooglys = self.dooglys_branch_id is not None
         
@@ -63,14 +52,12 @@ class Branch(TimeStampedModel):
                 'dooglys_branch_id': 'Нельзя одновременно указать IIKO Organization ID и Dooglys Branch ID. Выберите один источник.'
             })
         
-        # Проверяем, что хотя бы одно поле заполнено (опционально - закомментируйте если не нужно)
         if not has_iiko and not has_dooglys:
             raise ValidationError(
                 'Необходимо указать хотя бы один идентификатор: IIKO Organization ID или Dooglys Branch ID'
             )
     
     def save(self, *args, **kwargs):
-        '''Переопределяем save для вызова clean() при сохранении'''
         self.clean()
         super().save(*args, **kwargs)
     
@@ -80,6 +67,7 @@ class Branch(TimeStampedModel):
     class Meta:
         verbose_name = 'Торговая точка'
         verbose_name_plural = 'Торговые точки'
+
 
 class BranchConfig(TimeStampedModel):
     branch = models.OneToOneField(

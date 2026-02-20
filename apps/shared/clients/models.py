@@ -44,6 +44,19 @@ class CompanyConfig(TimeStampedModel):
 	vk_group_name = models.CharField(max_length=255, verbose_name='Названия группы ВК', default='Кафе LevOne')
 	vk_group_id = models.CharField(max_length=255, unique=False, null=False, blank=False, default='211202938', verbose_name='ID группы ВК')
 
+	# VK Mini-App ID — used to build deep-links into the mini-app with company/branch/table params
+	vk_mini_app_id = models.CharField(
+		max_length=50,
+		blank=True,
+		null=True,
+		verbose_name='ID VK Мини-Апп',
+		help_text=(
+			'Числовой ID мини-приложения ВКонтакте. '
+			'Найти можно в разделе «Управление» → «Мини-приложения» на странице группы. '
+			'Используется для генерации QR-кодов и ссылок на столики.'
+		)
+	)
+
 	# IIKO API Integration
 	iiko_api_url = models.URLField(
 		blank=True, 
@@ -94,7 +107,6 @@ class KnowledgeBase(TimeStampedModel):
 
 	def save(self, *args, **kwargs):
 		if not self.pk and KnowledgeBase.objects.filter(company=self.company).exists():
-			# Удаляем только старую запись ЭТОЙ компании
 			KnowledgeBase.objects.filter(company=self.company).delete()
 		super().save(*args, **kwargs)
 

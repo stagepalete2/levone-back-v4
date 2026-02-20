@@ -3,7 +3,6 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django import forms
 from django.utils.html import format_html
-from django.conf import settings
 
 from apps.shared.config.sites import tenant_admin
 from apps.shared.config.mixins import BranchRestrictedAdminMixin
@@ -15,7 +14,53 @@ from apps.tenant.branch.models import (
 from apps.tenant.senler.services import VKService
 
 
+# ─── Helpers ───────────────────────────────────────────────────
+
+def _get_company_for_current_tenant():
+    """
+    Returns the Company object for the current tenant by looking up
+    connection.schema_name → Domain → Company (shared models, public schema).
+    Branch has no direct FK to Company, so this is the only way.
+    """
+    from django.db import connection
+    from apps.shared.clients.models import Domain
+
+    schema_name = connection.schema_name
+    if not schema_name or schema_name == 'public':
+        return None
+
+    # Domain and Company are shared models → always accessible from any schema context
+    domain = (
+        Domain.objects
+        .filter(tenant__schema_name=schema_name, is_primary=True)
+        .select_related('tenant')
+        .first()
+    )
+    if not domain:
+        domain = (
+            Domain.objects
+            .filter(tenant__schema_name=schema_name)
+            .select_related('tenant')
+            .first()
+        )
+    return domain.tenant if domain else None
+
+
+def _get_vk_mini_app_id(company):
+    """
+    Returns the vk_mini_app_id stored in CompanyConfig.
+    Falls back to empty string if not configured.
+    """
+    if not company:
+        return ''
+    try:
+        return company.config.vk_mini_app_id or ''
+    except Exception:
+        return ''
+
+
 # ─── Branch ────────────────────────────────────────────────────
+
 class BranchConfigInline(admin.StackedInline):
     model = BranchConfig
     can_delete = False
@@ -23,79 +68,277 @@ class BranchConfigInline(admin.StackedInline):
     verbose_name_plural = 'Настройки'
 
 
-VK_MINI_APP_ID = getattr(settings, 'VK_MINI_APP_ID', '0')
-
-
 class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     company_field_name = 'company'
     branch_field_name = None
 
-    list_display = ('name', 'id', 'company', 'iiko_organization_id', 'get_vk_app_link', 'get_qr_code_btn', 'created_at')
-
+    list_display = ('name', 'id', 'company', 'iiko_organization_id', 'get_vk_link_btn', 'created_at')
     list_filter = ('company',)
     search_fields = ('name',)
     inlines = [BranchConfigInline]
-    readonly_fields = ('get_vk_app_link_detail', 'get_qr_code_btn_detail')
+    readonly_fields = ('vk_mini_app_widget',)
 
-    def _get_vk_url(self, obj):
-        from django.db import connection
-        company_slug = getattr(connection, 'schema_name', 'company')
-        table = obj.vk_mini_app_table or 1
-        return 'https://vk.com/app{}#company={}&branch={}&table={}'.format(
-            VK_MINI_APP_ID, company_slug, obj.id, table
-        )
-
-    def get_vk_app_link(self, obj):
-        url = self._get_vk_url(obj)
-        return format_html('<a href="{}" target="_blank" style="font-size:11px;color:#4a76a8;">VK Ссылка</a>', url)
-    get_vk_app_link.short_description = 'VK Мини-Апп'
-
-    def get_qr_code_btn(self, obj):
-        url = self._get_vk_url(obj)
-        return format_html(
-            '<button type="button" data-url="{}" data-name="{}"'
-            ' onclick="levQR(this)"'
-            ' style="background:#28a745;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">'
-            '📱 QR-код</button>', url, obj.name
-        )
-    get_qr_code_btn.short_description = 'QR-код'
-
-    def get_vk_app_link_detail(self, obj):
+    # ── list column: shows a small "🔗 Ссылка" link that opens a modal ──
+    def get_vk_link_btn(self, obj):
         if not obj.pk:
-            return 'Сохраните объект для генерации ссылки'
-        url = self._get_vk_url(obj)
+            return '—'
+        company = _get_company_for_current_tenant()
+        app_id = _get_vk_mini_app_id(company)
+        company_id = company.id if company else ''
+        if not app_id:
+            return format_html(
+                '<span style="color:#aaa;font-size:11px;">VK App ID не задан</span>'
+            )
+        # Render a small button; clicking opens the modal defined in the widget
         return format_html(
-            '<code style="display:block;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;word-break:break-all;">{}</code>'
-            '<a href="{}" target="_blank" class="button" style="margin-top:8px;display:inline-block;">Открыть ссылку</a>',
-            url, url
+            '<button type="button" '
+            '  onclick="levVkModal({branch_id}, {company_id}, \'{app_id}\', \'{branch_name}\')" '
+            '  style="background:#4a76a8;color:#fff;border:none;padding:3px 10px;'
+            '         border-radius:4px;cursor:pointer;font-size:11px;font-weight:600;">'
+            '🔗 QR / Ссылка'
+            '</button>',
+            branch_id=obj.pk,
+            company_id=company_id,
+            app_id=app_id,
+            branch_name=obj.name.replace("'", "\\'"),
         )
-    get_vk_app_link_detail.short_description = 'Ссылка на VK Мини-Апп'
+    get_vk_link_btn.short_description = 'VK Мини-Апп'
 
-    def get_qr_code_btn_detail(self, obj):
+    # ── detail page: full interactive widget ──
+    def vk_mini_app_widget(self, obj):
+        """
+        Renders an interactive widget on the Branch change page.
+
+        The widget lets the admin manually enter a table number, then:
+          • copies the generated link to clipboard
+          • generates and downloads a QR-code PNG (all client-side, no DB write)
+
+        URL format: https://vk.com/app{vk_mini_app_id}#company={company.id}&branch={branch.id}&table={table}
+        """
         if not obj.pk:
-            return 'Сохраните объект для генерации QR-кода'
-        url = self._get_vk_url(obj)
-        return format_html(
-            '<button type="button" data-url="{}" data-name="{}"'
-            ' onclick="levQR(this)"'
-            ' class="button" style="background:#28a745;color:#fff;padding:8px 16px;cursor:pointer;">'
-            '📱 Скачать QR-код (PNG)</button>', url, obj.name
+            return '💡 Сохраните торговую точку, чтобы увидеть виджет генерации ссылки и QR-кода.'
+
+        company = _get_company_for_current_tenant()
+        app_id = _get_vk_mini_app_id(company)
+        company_id = company.id if company else None
+
+        if not app_id:
+            return format_html(
+                '<div style="padding:14px;background:#fff8e1;border-left:4px solid #ffc107;'
+                'border-radius:4px;font-size:13px;">'
+                '⚠️ <strong>VK Mini-App ID не задан.</strong><br>'
+                'Укажите его в <a href="/admin/company/companyconfig/">Настройках компании</a> '
+                '→ поле <em>«ID VK Мини-Апп»</em>.'
+                '</div>'
+            )
+
+        if not company_id:
+            return format_html(
+                '<div style="padding:14px;background:#fff3f3;border-left:4px solid #dc3545;'
+                'border-radius:4px;font-size:13px;">'
+                '⚠️ Не удалось определить компанию для текущего тенанта.'
+                '</div>'
+            )
+
+        branch_id = obj.pk
+        # Base URL template — table will be appended by JS
+        base_url = 'https://vk.com/app{}#company={}&branch={}&table='.format(
+            app_id, company_id, branch_id
         )
-    get_qr_code_btn_detail.short_description = 'QR-код VK Мини-Апп'
+
+        return format_html(
+            '''
+            <div id="vk-widget-{bid}" style="
+                background:#f8f9fa;border:1px solid #e0e0e0;border-radius:12px;
+                padding:20px 22px;max-width:560px;font-family:system-ui,sans-serif;">
+
+              <div style="margin-bottom:14px;">
+                <span style="font-size:13px;font-weight:700;color:#1B2838;">📱 VK Мини-Апп — генерация ссылки и QR-кода</span>
+                <div style="font-size:11px;color:#888;margin-top:3px;">
+                  Ссылка: <code>company={cid} &amp; branch={bid} &amp; table=<em>N</em></code>
+                </div>
+              </div>
+
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <label style="font-size:13px;font-weight:600;color:#444;white-space:nowrap;">
+                  Номер стола:
+                </label>
+                <input
+                  type="number"
+                  id="vk-table-{bid}"
+                  min="1"
+                  placeholder="Введите номер стола"
+                  oninput="levUpdateUrl({bid})"
+                  style="border:1px solid #ccc;border-radius:6px;padding:7px 10px;
+                         font-size:14px;font-weight:600;width:140px;
+                         outline:none;transition:border-color .2s;"
+                  onfocus="this.style.borderColor='#4a76a8'"
+                  onblur="this.style.borderColor='#ccc'"
+                />
+              </div>
+
+              <div style="margin-bottom:14px;">
+                <code id="vk-url-{bid}" style="
+                    display:block;word-break:break-all;font-size:11px;
+                    background:#fff;border:1px solid #ddd;border-radius:6px;
+                    padding:8px 10px;color:#555;min-height:34px;line-height:1.5;">
+                  ← укажите номер стола выше
+                </code>
+              </div>
+
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" onclick="levCopyUrl({bid})"
+                  id="vk-copy-btn-{bid}"
+                  style="background:#4a76a8;color:#fff;border:none;border-radius:8px;
+                         padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;
+                         transition:background .15s;">
+                  📋 Копировать ссылку
+                </button>
+                <button type="button" onclick="levDownloadQr({bid}, '{branch_name}')"
+                  id="vk-qr-btn-{bid}"
+                  style="background:#28a745;color:#fff;border:none;border-radius:8px;
+                         padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;
+                         transition:background .15s;">
+                  📱 Скачать QR-код
+                </button>
+                <span id="vk-status-{bid}" style="font-size:12px;color:#28a745;
+                      align-self:center;display:none;font-weight:600;"></span>
+              </div>
+
+              <div id="vk-qr-canvas-{bid}" style="display:none;"></div>
+            </div>
+
+            <script>
+            /* ── VK Mini-App widget for branch {bid} ── */
+            (function() {{
+              var BASE_URL = '{base_url}';
+              var BID      = '{bid}';
+
+              window.levUpdateUrl = window.levUpdateUrl || function(bid) {{
+                var table  = document.getElementById('vk-table-' + bid).value.trim();
+                var urlEl  = document.getElementById('vk-url-' + bid);
+                var cBtn   = document.getElementById('vk-copy-btn-' + bid);
+                var qBtn   = document.getElementById('vk-qr-btn-' + bid);
+                var status = document.getElementById('vk-status-' + bid);
+                if (status) status.style.display = 'none';
+                if (!table || parseInt(table) < 1) {{
+                  urlEl.textContent = '← укажите номер стола выше';
+                  urlEl.style.color = '#aaa';
+                  return;
+                }}
+                urlEl.textContent = BASE_URL + table;
+                urlEl.style.color = '#1B2838';
+              }};
+
+              function getUrl(bid) {{
+                var table = document.getElementById('vk-table-' + bid).value.trim();
+                if (!table || parseInt(table) < 1) return null;
+                return BASE_URL + table;
+              }}
+
+              window.levCopyUrl = window.levCopyUrl || function(bid) {{
+                var url    = getUrl(bid);
+                var status = document.getElementById('vk-status-' + bid);
+                if (!url) {{
+                  alert('Сначала введите номер стола!');
+                  document.getElementById('vk-table-' + bid).focus();
+                  return;
+                }}
+                navigator.clipboard.writeText(url).then(function() {{
+                  status.textContent = '✅ Скопировано!';
+                  status.style.display = 'inline';
+                  setTimeout(function() {{ status.style.display = 'none'; }}, 2500);
+                }}).catch(function() {{
+                  /* fallback for older browsers */
+                  var ta = document.createElement('textarea');
+                  ta.value = url;
+                  ta.style.position = 'fixed';
+                  ta.style.opacity  = '0';
+                  document.body.appendChild(ta);
+                  ta.select();
+                  document.execCommand('copy');
+                  document.body.removeChild(ta);
+                  status.textContent = '✅ Скопировано!';
+                  status.style.display = 'inline';
+                  setTimeout(function() {{ status.style.display = 'none'; }}, 2500);
+                }});
+              }};
+
+              window.levDownloadQr = window.levDownloadQr || function(bid, branchName) {{
+                var url = getUrl(bid);
+                if (!url) {{
+                  alert('Сначала введите номер стола!');
+                  document.getElementById('vk-table-' + bid).focus();
+                  return;
+                }}
+                var table  = document.getElementById('vk-table-' + bid).value.trim();
+                var status = document.getElementById('vk-status-' + bid);
+                var canvasDiv = document.getElementById('vk-qr-canvas-' + bid);
+
+                function doQr() {{
+                  if (typeof QRCode === 'undefined') {{
+                    setTimeout(doQr, 150);
+                    return;
+                  }}
+                  canvasDiv.innerHTML = '';
+                  canvasDiv.style.display = 'none';
+                  new QRCode(canvasDiv, {{
+                    text: url,
+                    width: 512,
+                    height: 512,
+                    correctLevel: QRCode.CorrectLevel.H
+                  }});
+                  setTimeout(function() {{
+                    var canvas = canvasDiv.querySelector('canvas');
+                    if (!canvas) {{ alert('Ошибка генерации QR-кода'); return; }}
+                    var link = document.createElement('a');
+                    link.download = 'vk_qr_' + branchName.replace(/[^a-zA-Z0-9а-яёА-ЯЁ]/g, '_') + '_table' + table + '.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    status.textContent = '✅ QR скачан!';
+                    status.style.display = 'inline';
+                    setTimeout(function() {{ status.style.display = 'none'; }}, 3000);
+                  }}, 300);
+                }}
+                doQr();
+              }};
+            }})();
+            </script>
+            ''',
+            bid=branch_id,
+            cid=company_id,
+            base_url=base_url,
+            branch_name=obj.name.replace("'", "\\'"),
+        )
+    vk_mini_app_widget.short_description = 'VK Мини-Апп (ссылка и QR-код)'
 
     def get_fieldsets(self, request, obj=None):
-        base = [
-            (None, {'fields': ('name', 'description', 'iiko_organization_id', 'dooglys_branch_id', 'dooglas_sale_point_id', 'vk_mini_app_table')}),
-            ('VK Мини-Апп', {'fields': ('get_vk_app_link_detail', 'get_qr_code_btn_detail'), 'description': 'Ссылка и QR-код с параметрами company, branch, table'}),
+        return [
+            (None, {
+                'fields': (
+                    'name', 'description',
+                    'iiko_organization_id',
+                    'dooglys_branch_id',
+                    'dooglas_sale_point_id',
+                )
+            }),
+            ('📱 VK Мини-Апп', {
+                'fields': ('vk_mini_app_widget',),
+                'description': (
+                    'Генерация глубоких ссылок и QR-кодов для VK Мини-Апп. '
+                    'Данные не сохраняются — номер стола вводится вручную при каждой генерации. '
+                    'ID приложения настраивается в Настройках компании.'
+                ),
+            }),
         ]
-        return base
 
     class Media:
-        js = ('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',)
+        js = (
+            # QRCode.js loaded from CDN; fallback handled inside widget JS
+            'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+        )
 
     def get_queryset(self, request):
-        # Вызываем миксин (который теперь фильтрует по company),
-        # а потом дополнительно фильтруем по branch pk если нужно
         qs = super().get_queryset(request)
         user = request.user
         if user.is_superuser:
@@ -105,6 +348,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             if user_branches.exists():
                 return qs.filter(pk__in=user_branches)
         return qs
+
 
 # ─── BranchConfig ──────────────────────────────────────────────
 class BranchConfigAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
