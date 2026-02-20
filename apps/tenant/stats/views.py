@@ -117,6 +117,21 @@ class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView)
             date_from=period_ctx.get('date_from'),
             date_to=period_ctx.get('date_to'),
         )
+
+        # Build period_params string for template links (fixes {% with %} scoping bug)
+        branch_id = branch_ctx.get('selected_branch_id')
+        custom_from = period_ctx.get('custom_date_from')
+        custom_to = period_ctx.get('custom_date_to')
+        period_code = period_ctx.get('period_code', '30d')
+        parts = []
+        if branch_id:
+            parts.append(f'branch={branch_id}')
+        if custom_from and custom_to:
+            parts.append(f'custom_date_from={custom_from}')
+            parts.append(f'custom_date_to={custom_to}')
+        elif period_code and period_code != 'custom':
+            parts.append(f'period={period_code}')
+        context['period_params'] = '&'.join(parts)
         
         return context
 

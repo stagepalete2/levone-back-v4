@@ -33,6 +33,21 @@ class Branch(TimeStampedModel):
         verbose_name='Sale Point ID ресторана из Dooglys',
         unique=True
     )
+
+    vk_mini_app_link = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        verbose_name='Ссылка на VK Мини-Апп',
+        help_text='Автоматически генерируется при указании номера стола. Формат: https://vk.com/app...'
+    )
+
+    vk_mini_app_table = models.PositiveIntegerField(
+        blank=True,
+        null=True,
+        verbose_name='Номер стола (для QR-кода VK)',
+        help_text='Укажите номер стола для генерации ссылки и QR-кода VK Мини-Апп'
+    )
     
     def clean(self):
         '''Валидация: можно заполнить только одно из полей - iiko_organization_id или dooglys_branch_id'''

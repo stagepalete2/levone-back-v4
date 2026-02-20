@@ -487,28 +487,7 @@
     {% endif %}
 
     <div class="dashboard-grid">
-        {# Формируем параметры URL для ссылок на детальную статистику #}
-        {% if custom_date_from and custom_date_to %}
-            {% if selected_branch_id %}
-                {% with period_params="branch="|add:selected_branch_id|add:"&custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
-                    
-                    {% endwith %}
-            {% else %}
-                {% with period_params="custom_date_from="|add:custom_date_from|add:"&custom_date_to="|add:custom_date_to %}
-                    
-                    {% endwith %}
-            {% endif %}
-        {% else %}
-            {% if selected_branch_id %}
-                {% with period_params="branch="|add:selected_branch_id|add:"&period="|add:period_code %}
-                    
-                    {% endwith %}
-            {% else %}
-                {% with period_params="period="|add:period_code %}
-                    
-                    {% endwith %}
-            {% endif %}
-        {% endif %}
+        {# period_params is built in the view (StatisticsView.get_context_data) to avoid {% with %} scoping issues #}
 
         <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{{ period_params }}" class="stat-card">
             <h3>Оцифрованные гости всего</h3>
@@ -592,17 +571,17 @@
             </small>
         </div>
 
-        {% if not selected_branch %}
         <div class="stat-card">
             <h3>📬 Подписались в сообщество VK</h3>
             <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
+            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </div>
 
         <div class="stat-card">
             <h3>📨 Подписались на рассылку</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
+            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </div>
-        {% endif %}
     </div>
 
     <div class="row g-4 mb-4">
