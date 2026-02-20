@@ -2,224 +2,121 @@
 {% load i18n static %}
 
 {% block extrastyle %}
-    {{ block.super }}
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <style>
-        #content {
-            background: #f4f7f6 !important;
-            color: #333 !important;
-            min-height: 100vh;
-            padding: 20px !important;
-        }
-        
-        /* Fix for Admin Sidebar when Bootstrap is loaded */
-        #nav-sidebar, #nav-sidebar * {
-            box-sizing: content-box !important;
-        }
-        #nav-sidebar ul {
-            padding-left: 0;
-            margin-bottom: 0;
-            list-style: none;
-        }
-        #nav-sidebar li {
-            list-style: none;
-        }
-        #header, #header * {
-             box-sizing: content-box !important;
-        }
+{{ block.super }}
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+    /* Fix: Bootstrap vs Django Admin */
+    #container,#header,#nav-sidebar,#header *,#nav-sidebar *{box-sizing:content-box!important}
+    #nav-sidebar{position:sticky!important;top:0!important;max-height:100vh!important;overflow-x:hidden!important;overflow-y:auto!important;width:275px!important;flex-shrink:0!important}
+    #nav-sidebar ul{padding-left:0;margin-bottom:0;list-style:none} #nav-sidebar li{list-style:none}
+    #main,#content,#content *{box-sizing:border-box!important}
+    #content{background:#f4f7f6!important;color:#333!important;min-height:100vh}
 
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 30px;
-        }
+    .rf-page { padding: 24px; }
+    .rf-page-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; flex-wrap:wrap; gap:12px; }
+    .rf-page-title { font-size:1.4rem; font-weight:800; color:#1B2838; margin:0; }
+    .rf-page-sub { color:#888; font-size:0.82rem; margin-top:4px; }
 
-        .stat-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        }
+    .mode-tabs { display:inline-flex; gap:0; background:#fff; border:2px solid #e0e0e0; border-radius:12px; overflow:hidden; margin-bottom:8px; box-shadow:0 2px 6px rgba(0,0,0,0.05); }
+    .mode-tab { padding:14px 32px; font-size:0.95rem; font-weight:700; color:#666; text-decoration:none!important; transition:all 0.15s; border-right:2px solid #e0e0e0; text-align:center; min-width:160px; }
+    .mode-tab:last-child { border-right:none; }
+    .mode-tab:hover { background:#f8f8f8; }
+    .mode-tab.active { background:#1B2838; color:#fff; }
+    .mode-tab small { display:block; font-size:0.7rem; font-weight:500; margin-top:2px; color:inherit; opacity:0.7; }
 
-        .stat-card .label {
-            color: #888;
-            font-size: 13px;
-            margin-bottom: 8px;
-        }
+    .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; margin-top:24px; }
+    .stat-card { background:#fff; border-radius:12px; padding:18px 20px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+    .stat-card .label { color:#888; font-size:12px; margin-bottom:6px; }
+    .stat-card .value { font-size:2rem; font-weight:800; color:#1B2838; }
+    .stat-card .change { font-size:11px; margin-top:4px; color:#666; }
+    .stat-card .change.up { color:#28a745; }
+    .stat-card .change.down { color:#dc3545; }
 
-        .stat-card .value {
-            font-size: 32px;
-            font-weight: 700;
-            color: #1B2838;
-        }
+    .actions-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+    .btn-gold { background:#C9A227; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; text-decoration:none!important; }
+    .btn-gold:hover { background:#b8931f; color:#fff; transform:translateY(-1px); }
+    .btn-dark { background:#1B2838; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; text-decoration:none!important; }
+    .btn-dark:hover { background:#2d4050; color:#fff; }
+    .btn-outline { background:#fff; color:#333; border:1px solid #ddd; border-radius:8px; padding:10px 18px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; text-decoration:none!important; }
+    .btn-outline:hover { border-color:#C9A227; color:#C9A227; }
+    .btn-green { background:#28a745; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:0.82rem; font-weight:600; cursor:pointer; transition:all 0.15s; text-decoration:none!important; }
+    .btn-green:hover { background:#218838; color:#fff; }
 
-        .stat-card .change {
-            font-size: 12px;
-            margin-top: 5px;
-            color: #333;
-        }
+    .matrix-container { background:#fff; border-radius:14px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,0.06); margin-bottom:24px; }
+    .matrix-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+    .matrix-title { font-size:1.1rem; font-weight:700; color:#1B2838; }
+    .matrix-grid { display:grid; grid-template-columns:110px repeat(3,1fr); gap:4px; }
+    .matrix-cell { padding:12px; text-align:center; border-radius:8px; cursor:pointer; transition:all 0.2s; position:relative; min-height:140px; display:flex; align-items:center; justify-content:center; flex-direction:column; }
+    .matrix-cell:hover { transform:scale(1.02); box-shadow:0 4px 15px rgba(0,0,0,0.15); z-index:10; }
+    .matrix-header-cell { background:#1B2838; color:#fff; font-weight:600; font-size:12px; cursor:default; min-height:auto; padding:10px; display:block; }
+    .matrix-header-cell:hover { transform:none; box-shadow:none; }
+    .matrix-row-header { background:#eee; font-weight:600; font-size:11px; display:flex; flex-direction:column; justify-content:center; cursor:default; text-align:left; align-items:flex-start; padding-left:12px; }
+    .matrix-row-header:hover { transform:none; box-shadow:none; }
+    .matrix-row-header .days { font-size:10px; color:#666; font-weight:400; margin-top:3px; }
+    .segment-cell { display:flex; flex-direction:column; align-items:center; gap:3px; width:100%; }
+    .segment-emoji { font-size:20px; }
+    .segment-name { font-size:11px; font-weight:600; color:#333; line-height:1.2; }
+    .segment-count { font-size:1.3rem; font-weight:800; color:#1B2838; }
+    .segment-percent { font-size:9px; color:#666; }
+    .segment-actions { display:flex; gap:4px; margin-top:4px; }
+    .seg-btn { font-size:9px; padding:3px 8px; border-radius:6px; border:none; cursor:pointer; font-weight:600; transition:all 0.1s; white-space:nowrap; }
+    .seg-btn-mail { background:#C9A227; color:#fff; }
+    .seg-btn-mail:hover { background:#b8931f; }
+    .seg-btn-export { background:#e8e8e8; color:#555; }
+    .seg-btn-export:hover { background:#ddd; }
+    .question-icon { position:absolute; top:6px; right:6px; width:18px; height:18px; background:rgba(255,255,255,0.5); border-radius:50%; color:#333; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; cursor:help; z-index:20; }
+    .question-icon:hover { background:#fff; }
+    .strategy-popup { position:absolute; bottom:140%; right:-10px; width:200px; background:#1B2838; color:#fff; padding:10px; border-radius:8px; font-size:10px; line-height:1.4; font-weight:400; text-align:left; opacity:0; visibility:hidden; transform:translateY(10px); transition:all 0.2s; pointer-events:none; box-shadow:0 5px 15px rgba(0,0,0,0.2); z-index:100; }
+    .strategy-popup::after { content:''; position:absolute; top:100%; right:12px; border:5px solid transparent; border-top-color:#1B2838; }
+    .question-icon:hover .strategy-popup { opacity:1; visibility:visible; transform:translateY(0); }
 
-        .stat-card .change.up { color: #27ae60; }
-        .stat-card .change.down { color: #e74c3c; }
-
-        .matrix-container {
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            margin-bottom: 30px;
-        }
-
-        .matrix-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .matrix-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1B2838;
-        }
-
-        .matrix-grid {
-            display: grid;
-            grid-template-columns: 120px repeat(3, 1fr);
-            gap: 4px;
-        }
-
-        .matrix-cell {
-            padding: 15px;
-            text-align: center;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
-            min-height: 110px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .matrix-cell:hover {
-            transform: scale(1.02);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-            z-index: 10;
-        }
-
-        .matrix-header-cell {
-            background: #1B2838;
-            color: white;
-            font-weight: 600;
-            font-size: 12px;
-            cursor: default;
-            min-height: auto;
-            padding: 10px;
-            display: block;
-        }
-
-        .matrix-header-cell:hover {
-            transform: none;
-            box-shadow: none;
-        }
-
-        .matrix-row-header {
-            background: #eee;
-            font-weight: 600;
-            font-size: 11px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            cursor: default;
-            text-align: left;
-            align-items: flex-start;
-            padding-left: 15px;
-        }
-
-        .matrix-row-header:hover {
-            transform: none;
-            box-shadow: none;
-        }
-
-        .matrix-row-header .days {
-            font-size: 10px;
-            color: #666;
-            font-weight: 400;
-            margin-top: 3px;
-        }
-
-        .segment-cell {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            width: 100%;
-        }
-
-        .segment-emoji { font-size: 24px; }
-        .segment-name { font-size: 12px; font-weight: 600; color: #333; line-height: 1.2; }
-        .segment-count { font-size: 20px; font-weight: 700; color: #1B2838; }
-        .segment-percent { font-size: 10px; color: #666; }
-
-        .question-icon {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            width: 20px;
-            height: 20px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            color: #333;
-            font-size: 12px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: help;
-            z-index: 20;
-        }
-
-        .question-icon:hover { background: #fff; }
-
-        .question-icon .strategy-popup {
-            position: absolute;
-            bottom: 140%;
-            right: -10px;
-            width: 220px;
-            background: #1B2838;
-            color: #fff;
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 11px;
-            line-height: 1.4;
-            font-weight: 400;
-            text-align: left;
-            opacity: 0;
-            visibility: hidden;
-            z-index: 100;
-        }
-
-        .question-icon:hover .strategy-popup {
-            opacity: 1;
-            visibility: visible;
-        }
-    </style>
+    .segment-panel { background:#fff; border-radius:14px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,0.06); display:none; margin-bottom:40px; }
+    .segment-panel.active { display:block; animation:fadeIn 0.3s; }
+    .panel-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #eee; flex-wrap:wrap; gap:10px; }
+    .panel-title { display:flex; align-items:center; gap:12px; }
+    .panel-title .emoji { font-size:2rem; }
+    .panel-title .info h3 { font-size:1.1rem; color:#1B2838; margin:0; }
+    .panel-title .info p { color:#666; font-size:0.82rem; margin:0; }
+    .strategy-box { background:#f8f9fa; border-left:4px solid #C9A227; padding:14px 18px; border-radius:0 8px 8px 0; margin-bottom:16px; }
+    .strategy-box h4 { font-size:0.85rem; margin-bottom:6px; }
+    .strategy-box p { margin:0; font-size:0.82rem; color:#555; }
+    .guest-table { width:100%!important; border-collapse:collapse!important; }
+    .guest-table th { background:#f8f9fa!important; padding:10px 14px!important; text-align:left!important; font-size:11px!important; color:#666!important; text-transform:uppercase!important; border-bottom:2px solid #eee!important; }
+    .guest-table tr { background:#fff!important; border-bottom:1px solid #f0f0f0; }
+    .guest-table td { padding:10px 14px!important; font-size:0.82rem!important; color:#333; }
+    .vk-link { color:#4a76a8; text-decoration:none; font-weight:500; }
+    .vk-link:hover { text-decoration:underline; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); display:none; z-index:1000; align-items:center; justify-content:center; }
+    .modal-overlay.active { display:flex; }
+    .modal-box { background:#fff; border-radius:14px; padding:28px; width:480px; max-width:95vw; max-height:90vh; overflow-y:auto; }
+    .modal-box h3 { font-size:1.1rem; font-weight:700; margin-bottom:4px; }
+    .modal-textarea { width:100%; min-height:120px; border:1px solid #ddd; border-radius:10px; padding:12px; font-size:0.88rem; resize:vertical; }
+    .modal-textarea:focus { outline:none; border-color:#C9A227; box-shadow:0 0 0 2px rgba(201,162,39,0.15); }
+    .modal-actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    @media(max-width:768px){.stats-row{grid-template-columns:repeat(2,1fr)}.matrix-grid{grid-template-columns:80px repeat(3,1fr)}.mode-tab{padding:10px 16px;font-size:0.82rem;min-width:100px}}
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="rf-page">
+    <input type="hidden" id="branch_id" value="{{ branch.id }}">
+
+    <div class="rf-page-header">
         <div>
-            <h1 class="h3 fw-bold mb-1">📦 RF-Анализ доставки</h1>
-            <p class="text-muted mt-1 mb-0">Обновлено: {{ last_update|date:"d.m.Y H:i"|default:"Недавно" }}</p>
+            <h1 class="rf-page-title">📦 RF-Анализ доставки</h1>
+            <div class="rf-page-sub">{{ branch.name }} · Обновлено: {{ last_update|date:"d.m.Y"|default:"Недавно" }}</div>
         </div>
-        <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn btn-success">
-            <i class="bi bi-clock-history me-2"></i>История миграции
+        <a href="{% url 'rf-detail-statistics' id=branch.id %}" class="btn-outline"><i class="bi bi-arrow-left"></i> Назад</a>
+    </div>
+
+    <div class="mode-tabs">
+        <a href="{% url 'rf-detail-statistics' id=branch.id %}" class="mode-tab">
+            КАФЕ<small>RF-матрица</small>
+        </a>
+        <a href="{% url 'delivery-rf-statistics' id=branch.id %}" class="mode-tab active">
+            ДОСТАВКА<small>RF-матрица</small>
         </a>
     </div>
 
@@ -237,7 +134,7 @@
         <div class="stat-card">
             <div class="label">🏆 VIP-сегменты (F3)</div>
             <div class="value">{{ vip_count }}</div>
-            <div class="change">Активные покупатели</div>
+            <div class="change">{% widthratio vip_count unique_clients 100 %}% от базы</div>
         </div>
         <div class="stat-card">
             <div class="label">💔 Потерянные (R0)</div>
@@ -246,67 +143,181 @@
         </div>
     </div>
 
+    <div class="actions-bar">
+        <button class="btn-gold" onclick="openMailingModal('all', 'Все клиенты доставки', {{ unique_clients }})">📨 Рассылка по всем клиентам</button>
+        <a href="{% url 'delivery-rf-migration' id=branch.id %}" class="btn-green"><i class="bi bi-clock-history"></i> История миграций</a>
+    </div>
+
     <div class="matrix-container">
-        <div class="matrix-header">
+        <div class="matrix-head">
             <div class="matrix-title">RF-Матрица доставки</div>
         </div>
-
         <div class="matrix-grid">
             <div class="matrix-cell matrix-header-cell"></div>
-            <div class="matrix-cell matrix-header-cell">
-                F1: Редко<br>
-                <small class="opacity-75">({{ f1_range.frequency_min|default:1 }}-{{ f1_range.frequency_max|default:2 }} акт.)</small>
-            </div>
-            <div class="matrix-cell matrix-header-cell">
-                F2: Умеренно<br>
-                <small class="opacity-75">({{ f2_range.frequency_min|default:3 }}-{{ f2_range.frequency_max|default:5 }} акт.)</small>
-            </div>
-            <div class="matrix-cell matrix-header-cell">
-                F3: Часто<br>
-                <small class="opacity-75">({{ f3_range.frequency_min|default:6 }}+ акт.)</small>
-            </div>
+            <div class="matrix-cell matrix-header-cell">F1: Редко<br><small class="opacity-75">({{ f1_range.frequency_min|default:1 }}-{{ f1_range.frequency_max|default:2 }} акт.)</small></div>
+            <div class="matrix-cell matrix-header-cell">F2: Умеренно<br><small class="opacity-75">({{ f2_range.frequency_min|default:3 }}-{{ f2_range.frequency_max|default:5 }} акт.)</small></div>
+            <div class="matrix-cell matrix-header-cell">F3: Часто<br><small class="opacity-75">({{ f3_range.frequency_min|default:6 }}+ акт.)</small></div>
 
             {% for segment in segments %}
             {% if forloop.counter0|divisibleby:3 %}
             <div class="matrix-cell matrix-row-header">
                 {% with code=segment.code|slice:":2" %}
-                <div style="font-size: 14px; font-weight: 800; color: #1B2838;">
-                    {% if code == "R3" %}R3{% elif code == "R2" %}R2{% elif code == "R1" %}R1{% else %}R0{% endif %}
-                </div>
-                <div class="text-muted small">
-                    {% if code == "R3" %}Свежий{% elif code == "R2" %}Тёплый{% elif code == "R1" %}Остывший{% else %}Холодный{% endif %}
-                </div>
+                <div style="font-size:13px;font-weight:800;color:#1B2838;">{{ code }}</div>
+                <div style="font-size:10px;color:#666;">{% if code == "R3" %}Свежий{% elif code == "R2" %}Тёплый{% elif code == "R1" %}Остывший{% else %}Холодный{% endif %}</div>
                 {% endwith %}
-                <div class="days">
-                    {% if segment.recency_max >= 999 %}
-                    > {{ segment.recency_min }} дн.
-                    {% else %}
-                    {{ segment.recency_min }}-{{ segment.recency_max }} дн.
-                    {% endif %}
-                </div>
+                <div class="days">{% if segment.recency_max >= 999 %}&gt; {{ segment.recency_min }} дн.{% else %}{{ segment.recency_min }}-{{ segment.recency_max }} дн.{% endif %}</div>
             </div>
             {% endif %}
 
-            <div class="matrix-cell" style="background-color: {{ segment.color }};">
+            <div class="matrix-cell" style="background-color:{{ segment.color }};" onclick="showSegment('{{ segment.code }}')">
                 <div class="question-icon" onclick="event.stopPropagation()">?
-                    <div class="strategy-popup">
-                        <strong>Стратегия:</strong><br>
-                        {{ segment.strategy|default:"Стратегия не задана" }}
-                    </div>
+                    <div class="strategy-popup"><strong>Стратегия:</strong><br>{{ segment.strategy|default:"Не задана" }}</div>
                 </div>
                 <div class="segment-cell">
                     <div class="segment-emoji">{{ segment.emoji }}</div>
                     <div class="segment-name">{{ segment.name }}</div>
                     <div class="segment-count">{{ segment.guests_count }}</div>
-                    {% if unique_clients > 0 %}
-                    <div class="segment-percent">{% widthratio segment.guests_count unique_clients 100 %}%</div>
-                    {% else %}
-                    <div class="segment-percent">0%</div>
-                    {% endif %}
+                    <div class="segment-percent">{% if unique_clients > 0 %}{% widthratio segment.guests_count unique_clients 100 %}{% else %}0{% endif %}%</div>
+                    <div class="segment-actions">
+                        <button class="seg-btn seg-btn-export" onclick="event.stopPropagation();exportSenler('{{ segment.code }}','{{ segment.name }}')">Выгрузить</button>
+                        <button class="seg-btn seg-btn-mail" onclick="event.stopPropagation();openMailingModal('{{ segment.code }}','{{ segment.name }}',{{ segment.guests_count }})">Рассылка</button>
+                    </div>
                 </div>
             </div>
             {% endfor %}
         </div>
     </div>
+
+    <div class="segment-panel active" id="segmentPanel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <div class="emoji" id="paneEmoji">📦</div>
+                <div class="info">
+                    <h3 id="paneTitle">Выберите сегмент</h3>
+                    <p id="paneSub">Нажмите на ячейку матрицы выше</p>
+                </div>
+            </div>
+        </div>
+        <div class="strategy-box">
+            <h4>💡 Стратегия работы</h4>
+            <p id="paneStrategy">Выберите сегмент в матрице выше, чтобы увидеть список клиентов и рекомендации.</p>
+            <p id="paneLastCampaign" style="margin-top:8px;font-size:11px;color:#888;display:none;">📨 <span id="lastCampaignText"></span></p>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="guest-table">
+                <thead><tr><th>VK ID</th><th>Клиент</th><th>Последний заказ</th><th class="text-center">Заказов</th><th class="text-center">Коинов</th></tr></thead>
+                <tbody id="guestTableBody">
+                    <tr><td colspan="5" class="text-center py-4 text-muted">Выберите сегмент в матрице</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
+
+<div class="modal-overlay" id="mailingModal">
+    <div class="modal-box">
+        <h3>📨 Отправить рассылку</h3>
+        <p class="text-muted small mb-3">Сегмент: <strong id="mailingSegName"></strong> · <span id="mailingSegCount"></span> получателей</p>
+        <textarea class="modal-textarea" id="mailingText" placeholder="Введите текст сообщения..."></textarea>
+        <div class="modal-actions">
+            <button class="btn-gold" onclick="sendMailing()" id="btnSendMailing">📤 Отправить</button>
+            <button class="btn-outline" onclick="closeMailingModal()" style="margin-left:auto;">Отмена</button>
+        </div>
+        <div id="mailingStatus" style="margin-top:10px;font-size:0.82rem;"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="exportModal">
+    <div class="modal-box">
+        <h3>📥 Выгрузка для Senler</h3>
+        <p class="text-muted small mb-3">Сегмент: <strong id="exportSegmentName"></strong> · Записей: <span id="exportCount" class="text-success fw-bold"></span></p>
+        <div id="exportPreview" class="bg-light p-3 rounded mb-3 font-monospace small text-muted">...</div>
+        <div class="modal-actions">
+            <button class="btn-gold" onclick="downloadFile()">⬇️ Скачать файл</button>
+            <button class="btn-outline" onclick="closeExportModal()">Отмена</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentSegmentData = { name:'', code:'', ids:[] };
+    let mailingSegmentCode = '';
+
+    function showSegment(code) {
+        const branch = document.getElementById('branch_id').value;
+        const tbody = document.getElementById('guestTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div><div class="mt-2 text-muted">Загрузка...</div></td></tr>';
+
+        fetch(`/analytics/api/v1/rf/segment-guest/${code}/?branch=${branch}`)
+            .then(r => { if (!r.ok) throw new Error('Error'); return r.json(); })
+            .then(data => {
+                currentSegmentData = { name: data.segment_name, code: code, ids: data.guests.map(g => g.vk_id) };
+                document.getElementById('paneTitle').innerText = `${data.segment_name} (${code})`;
+                document.getElementById('paneEmoji').innerText = data.segment_emoji;
+                document.getElementById('paneStrategy').innerText = data.strategy || "Стратегия не задана.";
+                document.getElementById('paneSub').innerText = `Клиентов в сегменте: ${data.count}`;
+                const lc = document.getElementById('paneLastCampaign');
+                if (data.last_campaign) { document.getElementById('lastCampaignText').innerText = `Последняя рассылка: ${data.last_campaign}`; lc.style.display='block'; }
+                else { lc.style.display='none'; }
+                tbody.innerHTML = '';
+                if (data.guests.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Нет клиентов</td></tr>'; return; }
+                data.guests.forEach(g => {
+                    tbody.insertAdjacentHTML('beforeend', `<tr><td><a href="https://vk.com/id${g.vk_id}" target="_blank" class="vk-link">id${g.vk_id}</a></td><td>${g.name}</td><td>${g.last_visit}</td><td class="text-center">${g.total_visits}</td><td class="text-center">${g.coins}</td></tr>`);
+                });
+            })
+            .catch(() => { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-danger">Ошибка загрузки</td></tr>'; });
+    }
+
+    function exportSenler(code, name) {
+        const branch = document.getElementById('branch_id').value;
+        fetch(`/analytics/api/v1/rf/segment-guest/${code}/?branch=${branch}`)
+            .then(r => r.json()).then(data => {
+                currentSegmentData = { name, code, ids: data.guests.map(g => g.vk_id) };
+                document.getElementById('exportSegmentName').innerText = name;
+                document.getElementById('exportCount').innerText = data.count;
+                document.getElementById('exportPreview').innerText = currentSegmentData.ids.slice(0,5).join('\n') + (currentSegmentData.ids.length > 5 ? '\n...' : '');
+                document.getElementById('exportModal').classList.add('active');
+            });
+    }
+    function closeExportModal() { document.getElementById('exportModal').classList.remove('active'); }
+    function downloadFile() {
+        const blob = new Blob([currentSegmentData.ids.join('\n')], { type:'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `delivery_rf_senler_${currentSegmentData.code}_${new Date().toISOString().slice(0,10)}.txt`;
+        link.click(); closeExportModal();
+    }
+
+    function openMailingModal(code, name, count) {
+        mailingSegmentCode = code;
+        document.getElementById('mailingSegName').innerText = name;
+        document.getElementById('mailingSegCount').innerText = count;
+        document.getElementById('mailingText').value = '';
+        document.getElementById('mailingStatus').textContent = '';
+        document.getElementById('mailingModal').classList.add('active');
+        document.getElementById('mailingText').focus();
+    }
+    function closeMailingModal() { document.getElementById('mailingModal').classList.remove('active'); }
+
+    function sendMailing() {
+        const text = document.getElementById('mailingText').value.trim();
+        if (!text) { document.getElementById('mailingStatus').innerHTML = '<span style="color:#dc3545">Введите текст</span>'; return; }
+        const btn = document.getElementById('btnSendMailing');
+        btn.disabled = true; btn.textContent = '⏳ Отправка...';
+        const branch = document.getElementById('branch_id').value;
+        fetch("{% url 'rf-segment-mailing' %}", {
+            method:'POST',
+            headers:{'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+            body: JSON.stringify({ branch: parseInt(branch), segment_code: mailingSegmentCode, text })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                document.getElementById('mailingStatus').innerHTML = '<span style="color:#28a745">✅ ' + (data.message || 'Отправлено!') + '</span>';
+                setTimeout(closeMailingModal, 2000);
+            } else {
+                document.getElementById('mailingStatus').innerHTML = '<span style="color:#dc3545">❌ ' + (data.error || 'Ошибка') + '</span>';
+            }
+        }).catch(() => { document.getElementById('mailingStatus').innerHTML = '<span style="color:#dc3545">❌ Ошибка сети</span>'; })
+        .finally(() => { btn.disabled = false; btn.textContent = '📤 Отправить'; });
+    }
+</script>
 {% endblock %}

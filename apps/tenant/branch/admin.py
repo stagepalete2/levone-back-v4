@@ -3,6 +3,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django import forms
 from django.utils.html import format_html
+from django.conf import settings
 
 from apps.shared.config.sites import tenant_admin
 from apps.shared.config.mixins import BranchRestrictedAdminMixin
@@ -22,14 +23,74 @@ class BranchConfigInline(admin.StackedInline):
     verbose_name_plural = 'Настройки'
 
 
-class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
-    company_field_name = 'company'    # <--- ДОБАВЛЕНО: фильтрация по компании
-    branch_field_name = None          # Branch сам по себе — фильтруем по pk
+VK_MINI_APP_ID = getattr(settings, 'VK_MINI_APP_ID', '0')
 
-    list_display = ('name', 'company', 'iiko_organization_id', 'created_at')
+
+class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
+    company_field_name = 'company'
+    branch_field_name = None
+
+    list_display = ('name', 'company', 'iiko_organization_id', 'get_vk_app_link', 'get_qr_code_btn', 'created_at')
     list_filter = ('company',)
     search_fields = ('name',)
     inlines = [BranchConfigInline]
+    readonly_fields = ('get_vk_app_link_detail', 'get_qr_code_btn_detail')
+
+    def _get_vk_url(self, obj):
+        from django.db import connection
+        company_slug = getattr(connection, 'schema_name', 'company')
+        table = obj.vk_mini_app_table or 1
+        return 'https://vk.com/app{}#company={}&branch={}&table={}'.format(
+            VK_MINI_APP_ID, company_slug, obj.id, table
+        )
+
+    def get_vk_app_link(self, obj):
+        url = self._get_vk_url(obj)
+        return format_html('<a href="{}" target="_blank" style="font-size:11px;color:#4a76a8;">VK Ссылка</a>', url)
+    get_vk_app_link.short_description = 'VK Мини-Апп'
+
+    def get_qr_code_btn(self, obj):
+        url = self._get_vk_url(obj)
+        return format_html(
+            '<button type="button" data-url="{}" data-name="{}"'
+            ' onclick="levQR(this)"'
+            ' style="background:#28a745;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">'
+            '📱 QR-код</button>', url, obj.name
+        )
+    get_qr_code_btn.short_description = 'QR-код'
+
+    def get_vk_app_link_detail(self, obj):
+        if not obj.pk:
+            return 'Сохраните объект для генерации ссылки'
+        url = self._get_vk_url(obj)
+        return format_html(
+            '<code style="display:block;padding:10px;background:#f8f9fa;border-radius:8px;font-size:12px;word-break:break-all;">{}</code>'
+            '<a href="{}" target="_blank" class="button" style="margin-top:8px;display:inline-block;">Открыть ссылку</a>',
+            url, url
+        )
+    get_vk_app_link_detail.short_description = 'Ссылка на VK Мини-Апп'
+
+    def get_qr_code_btn_detail(self, obj):
+        if not obj.pk:
+            return 'Сохраните объект для генерации QR-кода'
+        url = self._get_vk_url(obj)
+        return format_html(
+            '<button type="button" data-url="{}" data-name="{}"'
+            ' onclick="levQR(this)"'
+            ' class="button" style="background:#28a745;color:#fff;padding:8px 16px;cursor:pointer;">'
+            '📱 Скачать QR-код (PNG)</button>', url, obj.name
+        )
+    get_qr_code_btn_detail.short_description = 'QR-код VK Мини-Апп'
+
+    def get_fieldsets(self, request, obj=None):
+        base = [
+            (None, {'fields': ('name', 'description', 'iiko_organization_id', 'dooglys_branch_id', 'dooglas_sale_point_id', 'vk_mini_app_table')}),
+            ('VK Мини-Апп', {'fields': ('get_vk_app_link_detail', 'get_qr_code_btn_detail'), 'description': 'Ссылка и QR-код с параметрами company, branch, table'}),
+        ]
+        return base
+
+    class Media:
+        js = ('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',)
 
     def get_queryset(self, request):
         # Вызываем миксин (который теперь фильтрует по company),
