@@ -11,19 +11,44 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-r$=kolofo@otwg#dxtuxf9+&78
 
 DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    ".localhost",
+    '.levelupapp.ru',
 
-CORS_ALLOW_ALL_ORIGINS = True
+    'm.vk.com',
+    'tunnel.levoneapp.ru',
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    'levonework.ru'
+]
 
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost',
     'http://127.0.0.1',
-    'https://*.levonework.ru',  # <--- Звездочка разрешает tunnel, levone и любые другие будущие тенанты
-    'https://levonework.ru',
-	'https://tunnel.levoneapp.ru'
+    'https://levelupapp.ru',
+    'https://*.levelupapp.ru',
+
+    'https://m.vk.com',
+    'https://tunnel.levoneapp.ru',
+
+    'https://levonework.ru'
 ]
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost',
+    'http://127.0.0.1',
+    'https://levelupapp.ru',
+    'https://*.levelupapp.ru',
+
+    'https://m.vk.com',
+    'https://tunnel.levoneapp.ru',
+
+    'https://levonework.ru'
+]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',

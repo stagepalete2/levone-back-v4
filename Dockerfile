@@ -38,6 +38,9 @@ EXPOSE 7000
 
 CMD ["gunicorn", \
      "--bind", "0.0.0.0:7000", \
-     "--workers", "2", \
-     "--threads", "2", \
+     "--worker-class", "gthread", \
+     "--workers", "14", \
+     "--threads", "4", \
+     "--max-requests", "1500", \
+     "--max-requests-jitter", "100", \
      "main.wsgi:application"]

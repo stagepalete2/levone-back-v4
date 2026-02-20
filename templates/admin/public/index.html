@@ -5,19 +5,19 @@
 {{ block.super }}
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-    /* ── Reset for this page ── */
+    /* ── Reset for this page (Light Theme) ── */
     #content {
-        background: #0a0c10 !important;
-        color: #e8eaed !important;
+        background: #f4f5f7 !important; /* Светло-серый фон страницы */
+        color: #111827 !important; /* Темный текст */
         min-height: 100vh;
         padding: 0 !important;
         font-family: 'Inter', system-ui, sans-serif;
     }
 
     ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #0a0c10; }
-    ::-webkit-scrollbar-thumb { background: #2a2d36; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3a3d4a; }
+    ::-webkit-scrollbar-track { background: #f4f5f7; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
     /* ── Page Wrapper ── */
     .infra-page {
@@ -33,19 +33,19 @@
         align-items: flex-end;
         margin-bottom: 48px;
         padding-bottom: 32px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid #e5e7eb; /* Светлая разделительная линия */
     }
 
     .infra-header-title {
         font-size: 2.2rem;
         font-weight: 900;
-        color: #ffffff;
+        color: #111827; /* Темный заголовок */
         letter-spacing: -1.5px;
         line-height: 1;
     }
 
     .infra-header-title span {
-        background: linear-gradient(135deg, #34d058 0%, #00b4d8 60%, #a855f7 100%);
+        background: linear-gradient(135deg, #22c55e 0%, #00b4d8 60%, #a855f7 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
@@ -66,7 +66,7 @@
 
     .btn-create {
         background: linear-gradient(135deg, #34d058, #22c55e);
-        color: #000;
+        color: #ffffff; /* Белый текст на зеленой кнопке */
         border: none;
         border-radius: 10px;
         padding: 11px 22px;
@@ -76,12 +76,12 @@
         letter-spacing: 0.3px;
         cursor: pointer;
         transition: all 0.2s;
-        box-shadow: 0 4px 20px rgba(52, 208, 88, 0.25);
+        box-shadow: 0 4px 15px rgba(52, 208, 88, 0.3);
     }
     .btn-create:hover {
         transform: translateY(-2px);
-        box-shadow: 0 8px 30px rgba(52, 208, 88, 0.4);
-        color: #000;
+        box-shadow: 0 6px 20px rgba(52, 208, 88, 0.4);
+        color: #ffffff;
     }
 
     /* ── Summary Stats Bar ── */
@@ -93,13 +93,14 @@
     }
 
     .stat-pill {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.07);
+        background: #ffffff; /* Белые плашки */
+        border: 1px solid #e5e7eb;
         border-radius: 14px;
         padding: 20px 22px;
         position: relative;
         overflow: hidden;
-        transition: border-color 0.2s;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
     .stat-pill::before {
         content: '';
@@ -109,11 +110,11 @@
         transition: opacity 0.2s;
         background: radial-gradient(circle at 50% 0%, rgba(52,208,88,0.06), transparent 70%);
     }
-    .stat-pill:hover { border-color: rgba(52,208,88,0.2); }
+    .stat-pill:hover { border-color: rgba(52,208,88,0.4); box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
     .stat-pill:hover::before { opacity: 1; }
     .stat-pill-label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 10px; }
-    .stat-pill-value { font-size: 2rem; font-weight: 800; color: #fff; line-height: 1; }
-    .stat-pill-sub { font-size: 0.72rem; color: #4b5563; margin-top: 6px; }
+    .stat-pill-value { font-size: 2rem; font-weight: 800; color: #111827; line-height: 1; }
+    .stat-pill-sub { font-size: 0.72rem; color: #6b7280; margin-top: 6px; }
 
     /* ── Tenant Grid ── */
     .tenant-grid {
@@ -124,28 +125,29 @@
 
     /* ── Tenant Card ── */
     .tenant-card {
-        background: rgba(255,255,255,0.025);
-        border: 1px solid rgba(255,255,255,0.07);
+        background: #ffffff; /* Белые карточки */
+        border: 1px solid #e5e7eb;
         border-radius: 20px;
         overflow: hidden;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
 
     .tenant-card::before {
         content: '';
         position: absolute;
         top: 0; left: 0; right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(52,208,88,0.4), transparent);
+        height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(52,208,88,0.6), transparent);
         opacity: 0;
         transition: opacity 0.3s;
     }
 
     .tenant-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(52,208,88,0.2);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(52,208,88,0.1);
+        border-color: rgba(52,208,88,0.3);
+        box-shadow: 0 12px 24px rgba(0,0,0,0.06), 0 0 0 1px rgba(52,208,88,0.1);
     }
     .tenant-card:hover::before { opacity: 1; }
 
@@ -162,7 +164,7 @@
     .card-name {
         font-size: 1.05rem;
         font-weight: 800;
-        color: #f9fafb;
+        color: #111827;
         letter-spacing: -0.3px;
         margin-bottom: 6px;
         white-space: nowrap;
@@ -177,8 +179,8 @@
         font-size: 0.72rem;
         color: #4b5563;
         font-family: 'SF Mono', 'Fira Code', monospace;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.06);
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
         border-radius: 6px;
         padding: 3px 8px;
     }
@@ -195,13 +197,13 @@
         border-radius: 50%;
         position: relative;
     }
-    .status-dot.active { background: #34d058; box-shadow: 0 0 0 rgba(52,208,88,0.4); animation: pulseGreen 2.5s ease-in-out infinite; }
+    .status-dot.active { background: #22c55e; box-shadow: 0 0 0 rgba(34,197,94,0.4); animation: pulseGreen 2.5s ease-in-out infinite; }
     .status-dot.inactive { background: #ef4444; box-shadow: 0 0 0 rgba(239,68,68,0.4); animation: pulseRed 2.5s ease-in-out infinite; }
 
     @keyframes pulseGreen {
-        0% { box-shadow: 0 0 0 0 rgba(52,208,88,0.6); }
-        70% { box-shadow: 0 0 0 8px rgba(52,208,88,0); }
-        100% { box-shadow: 0 0 0 0 rgba(52,208,88,0); }
+        0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+        70% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+        100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
     }
     @keyframes pulseRed {
         0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
@@ -216,7 +218,7 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    .branch-count-tag strong { color: #34d058; font-size: 1.1rem; display: block; line-height: 1; }
+    .branch-count-tag strong { color: #22c55e; font-size: 1.1rem; display: block; line-height: 1; }
 
     /* ── Branch List ── */
     .branch-list {
@@ -232,34 +234,34 @@
         align-items: center;
         justify-content: space-between;
         padding: 8px 12px;
-        background: rgba(255,255,255,0.03);
+        background: #f9fafb;
         border-radius: 8px;
-        border: 1px solid rgba(255,255,255,0.04);
+        border: 1px solid #f3f4f6;
         transition: background 0.15s;
     }
-    .branch-row:hover { background: rgba(255,255,255,0.06); }
+    .branch-row:hover { background: #f3f4f6; }
     .branch-row-name {
         display: flex;
         align-items: center;
         gap: 8px;
         font-size: 0.82rem;
-        color: #d1d5db;
+        color: #374151;
         font-weight: 500;
     }
     .branch-dot {
         width: 5px; height: 5px;
-        background: #34d058;
+        background: #22c55e;
         border-radius: 50%;
-        opacity: 0.5;
+        opacity: 0.7;
         flex-shrink: 0;
     }
     .branch-online-tag {
         font-size: 0.63rem;
         font-weight: 700;
-        color: #34d058;
+        color: #16a34a;
         letter-spacing: 0.5px;
-        background: rgba(52,208,88,0.08);
-        border: 1px solid rgba(52,208,88,0.15);
+        background: #dcfce7;
+        border: 1px solid #bbf7d0;
         border-radius: 4px;
         padding: 2px 6px;
     }
@@ -267,17 +269,17 @@
     .branch-empty {
         text-align: center;
         padding: 16px;
-        color: #374151;
+        color: #6b7280;
         font-size: 0.78rem;
         font-style: italic;
-        border: 1px dashed rgba(255,255,255,0.06);
+        border: 1px dashed #d1d5db;
         border-radius: 8px;
     }
 
     /* ── Card Footer ── */
     .card-footer-actions {
         padding: 16px 24px 22px;
-        border-top: 1px solid rgba(255,255,255,0.05);
+        border-top: 1px solid #f3f4f6;
         display: flex;
         gap: 8px;
     }
@@ -286,9 +288,9 @@
         flex: 1;
         display: block;
         text-align: center;
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        color: #9ca3af;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        color: #4b5563;
         border-radius: 9px;
         padding: 10px 14px;
         font-size: 0.75rem;
@@ -298,10 +300,11 @@
         transition: all 0.2s;
     }
     .btn-go-admin:hover {
-        background: #34d058;
-        border-color: #34d058;
-        color: #000;
+        background: #22c55e;
+        border-color: #22c55e;
+        color: #ffffff;
         text-decoration: none;
+        box-shadow: 0 4px 10px rgba(34,197,94,0.2);
     }
 
     .btn-edit {
@@ -309,8 +312,8 @@
         align-items: center;
         justify-content: center;
         width: 40px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: #ffffff;
+        border: 1px solid #d1d5db;
         border-radius: 9px;
         color: #6b7280;
         text-decoration: none;
@@ -318,8 +321,8 @@
         transition: all 0.2s;
     }
     .btn-edit:hover {
-        background: rgba(255,255,255,0.1);
-        color: #d1d5db;
+        background: #f3f4f6;
+        color: #111827;
         text-decoration: none;
     }
 
@@ -330,19 +333,19 @@
         border-radius: 5px;
         font-weight: 600;
     }
-    .expire-ok { background: rgba(52,208,88,0.1); color: #34d058; border: 1px solid rgba(52,208,88,0.2); }
-    .expire-warn { background: rgba(251,191,36,0.1); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
-    .expire-danger { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); }
+    .expire-ok { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+    .expire-warn { background: #fef3c7; color: #d97706; border: 1px solid #fde68a; }
+    .expire-danger { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
 
     /* ── Empty state ── */
     .empty-state {
         text-align: center;
         padding: 80px 20px;
-        color: #374151;
+        color: #6b7280;
     }
-    .empty-state-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.4; }
-    .empty-state-title { font-size: 1.2rem; font-weight: 700; color: #4b5563; margin-bottom: 8px; }
-    .empty-state-sub { font-size: 0.85rem; color: #374151; }
+    .empty-state-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.7; }
+    .empty-state-title { font-size: 1.2rem; font-weight: 700; color: #111827; margin-bottom: 8px; }
+    .empty-state-sub { font-size: 0.85rem; color: #4b5563; }
 
     /* ── Responsive ── */
     @media (max-width: 768px) {
@@ -367,7 +370,6 @@
 {% block content %}
 <div class="infra-page">
 
-    <!-- Header -->
     <div class="infra-header">
         <div>
             <div class="infra-header-title">Клиентская <span>Инфраструктура</span></div>
@@ -378,7 +380,6 @@
         </div>
     </div>
 
-    <!-- Stats bar -->
     <div class="stats-bar">
         <div class="stat-pill">
             <div class="stat-pill-label">Всего клиентов</div>
@@ -387,7 +388,7 @@
         </div>
         <div class="stat-pill">
             <div class="stat-pill-label">Активных</div>
-            <div class="stat-pill-value" style="color:#34d058;">{% for item in tenants %}{% if item.tenant.is_active %}{% with x=forloop.counter %}{% endwith %}{% endif %}{% endfor %}{{ tenants|length }}</div>
+            <div class="stat-pill-value" style="color:#22c55e;">{% for item in tenants %}{% if item.tenant.is_active %}{% with x=forloop.counter %}{% endwith %}{% endif %}{% endfor %}{{ tenants|length }}</div>
             <div class="stat-pill-sub">в работе</div>
         </div>
         <div class="stat-pill">
@@ -402,12 +403,10 @@
         </div>
     </div>
 
-    <!-- Tenant Grid -->
     {% if tenants %}
     <div class="tenant-grid">
         {% for item in tenants %}
         <div class="tenant-card">
-            <!-- Top -->
             <div class="card-top">
                 <div class="card-identity">
                     <div class="card-name">{{ item.tenant.name|upper }}</div>
@@ -427,13 +426,12 @@
                         {% endif %}
                     </div>
                     <div class="branch-count-tag">
-                        <strong style="color:#34d058;font-size:1.3rem;">{{ item.branch_count }}</strong>
+                        <strong style="color:#22c55e;font-size:1.3rem;">{{ item.branch_count }}</strong>
                         точки
                     </div>
                 </div>
             </div>
 
-            <!-- Meta -->
             <div class="card-meta">
                 {% if item.tenant.paid_until %}
                     {% now "Y-m-d" as today_str %}
@@ -441,7 +439,6 @@
                 {% endif %}
             </div>
 
-            <!-- Branch list -->
             <div class="branch-list">
                 {% for branch in item.branches %}
                 <div class="branch-row">
@@ -458,7 +455,6 @@
                 {% endfor %}
             </div>
 
-            <!-- Footer -->
             <div class="card-footer-actions">
                 {% if item.domain %}
                 <a href="https://{{ item.domain }}/admin" target="_blank" class="btn-go-admin">

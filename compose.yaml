@@ -46,12 +46,13 @@ services:
       - .env.dev
     networks:
       - postgres-network
+    restart: unless-stopped
 
   celery_beat:
     build: .
     container_name: celery_beat
     command: celery -A main beat -l info
-    restart: always
+    restart: unless-stopped
     depends_on:
       - redis
     networks:
