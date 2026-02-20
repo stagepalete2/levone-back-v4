@@ -85,7 +85,7 @@ class CompanyConfig(TimeStampedModel):
 		help_text='Базовый URL API, например: https://tenant.dooglys.com'
 	)
 
-	dooglys_api_token = models.CharField(max_length=255, verbose_name='DOOGLYS API TOKEN')
+	dooglys_api_token = models.CharField(max_length=255, null=True, blank=True, verbose_name='DOOGLYS API TOKEN')
 
 	def __str__(self):
 		return f'Настройки для {self.company}'

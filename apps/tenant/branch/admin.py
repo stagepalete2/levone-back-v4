@@ -71,46 +71,13 @@ class BranchConfigInline(admin.StackedInline):
 class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     branch_field_name = None
 
-<<<<<<< HEAD
-    list_display = ('name', 'id', 'iiko_organization_id', 'get_vk_app_link', 'get_qr_code_btn', 'created_at')
-
-=======
-    list_display = ('name', 'id', 'company', 'iiko_organization_id', 'get_vk_link_btn', 'created_at')
-    list_filter = ('company',)
->>>>>>> b23c2508c135b33e67188910dd67e296427006a3
+    list_display = ('name', 'id', 'iiko_organization_id', 'get_vk_link_btn', 'created_at')
     search_fields = ('name',)
     inlines = [BranchConfigInline]
     readonly_fields = ('vk_mini_app_widget',)
 
-<<<<<<< HEAD
-    def _get_vk_url(self, obj):
-        from django.db import connection
-        company_slug = getattr(connection, 'schema_name',)
-        table = obj.vk_mini_app_table or 1
-        return 'https://vk.com/app{}#company={}&branch={}&table={}'.format(
-            VK_MINI_APP_ID, company_slug, obj.id, table
-        )
-
-    def get_vk_app_link(self, obj):
-        url = self._get_vk_url(obj)
-        return format_html('<a href="{}" target="_blank" style="font-size:11px;color:#4a76a8;">VK Ссылка</a>', url)
-    get_vk_app_link.short_description = 'VK Мини-Апп'
-
-    def get_qr_code_btn(self, obj):
-        url = self._get_vk_url(obj)
-        return format_html(
-            '<button type="button" data-url="{}" data-name="{}"'
-            ' onclick="levQR(this)"'
-            ' style="background:#28a745;color:#fff;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;">'
-            '📱 QR-код</button>', url, obj.name
-        )
-    get_qr_code_btn.short_description = 'QR-код'
-
-    def get_vk_app_link_detail(self, obj):
-=======
     # ── list column: shows a small "🔗 Ссылка" link that opens a modal ──
     def get_vk_link_btn(self, obj):
->>>>>>> b23c2508c135b33e67188910dd67e296427006a3
         if not obj.pk:
             return '—'
         company = _get_company_for_current_tenant()
@@ -136,6 +103,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     get_vk_link_btn.short_description = 'VK Мини-Апп'
 
     # ── detail page: full interactive widget ──
+    # ── detail page: full interactive widget ──
     def vk_mini_app_widget(self, obj):
         """
         Renders an interactive widget on the Branch change page.
@@ -143,15 +111,13 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
         The widget lets the admin manually enter a table number, then:
           • copies the generated link to clipboard
           • generates and downloads a QR-code PNG (all client-side, no DB write)
-
-        URL format: https://vk.com/app{vk_mini_app_id}#company={company.id}&branch={branch.id}&table={table}
         """
         if not obj.pk:
             return '💡 Сохраните торговую точку, чтобы увидеть виджет генерации ссылки и QR-кода.'
 
         company = _get_company_for_current_tenant()
         app_id = _get_vk_mini_app_id(company)
-        company_id = company.id if company else None
+        company_id = company.id - 1 if company else None
 
         if not app_id:
             return format_html(
@@ -172,10 +138,8 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             )
 
         branch_id = obj.pk
-        # Base URL template — table will be appended by JS
-        base_url = 'https://vk.com/app{}#company={}&branch={}&table='.format(
-            app_id, company_id, branch_id
-        )
+
+        # УБРАНА ПЕРЕМЕННАЯ base_url отсюда, теперь URL формируется прямо в JS
 
         return format_html(
             '''
@@ -186,7 +150,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
               <div style="margin-bottom:14px;">
                 <span style="font-size:13px;font-weight:700;color:#1B2838;">📱 VK Мини-Апп — генерация ссылки и QR-кода</span>
                 <div style="font-size:11px;color:#888;margin-top:3px;">
-                  Ссылка: <code>company={cid} &amp; branch={bid} &amp; table=<em>N</em></code>
+                  Ссылка: <code>company={cid}&branch={bid}&table=<em>N</em></code>
                 </div>
               </div>
 
@@ -242,7 +206,8 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             <script>
             /* ── VK Mini-App widget for branch {bid} ── */
             (function() {{
-              var BASE_URL = '{base_url}';
+              // ✅ ИЗМЕНЕНИЕ: Формируем URL напрямую, чтобы избежать экранирования амперсандов
+              var BASE_URL = 'https://vk.com/app{app_id}/#/?company={cid}&branch={bid}&table=';
               var BID      = '{bid}';
 
               window.levUpdateUrl = window.levUpdateUrl || function(bid) {{
@@ -280,7 +245,6 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                   status.style.display = 'inline';
                   setTimeout(function() {{ status.style.display = 'none'; }}, 2500);
                 }}).catch(function() {{
-                  /* fallback for older browsers */
                   var ta = document.createElement('textarea');
                   ta.value = url;
                   ta.style.position = 'fixed';
@@ -338,7 +302,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             ''',
             bid=branch_id,
             cid=company_id,
-            base_url=base_url,
+            app_id=app_id,  # ✅ Добавлен app_id в аргументы
             branch_name=obj.name.replace("'", "\\'"),
         )
     vk_mini_app_widget.short_description = 'VK Мини-Апп (ссылка и QR-код)'
