@@ -26,7 +26,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     company_field_name = 'company'    # <--- ДОБАВЛЕНО: фильтрация по компании
     branch_field_name = None          # Branch сам по себе — фильтруем по pk
 
-    list_display = ('name', 'company', 'iiko_organization_id', 'created_at')
+    list_display = ('name', 'id', 'company', 'iiko_organization_id', 'created_at')
     list_filter = ('company',)
     search_fields = ('name',)
     inlines = [BranchConfigInline]
