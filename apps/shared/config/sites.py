@@ -11,8 +11,11 @@ class PublicAdminSite(admin.AdminSite):
         return (
             request.user.is_active
             and request.user.is_staff
-            and request.user.is_superuser
             and request.tenant.schema_name == 'public'
+        ) or (
+            request.user.is_active
+            and request.user.is_staff
+            and request.user.is_superuser
         )
 
     def index(self, request, extra_context=None):

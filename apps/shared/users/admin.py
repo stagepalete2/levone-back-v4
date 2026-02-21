@@ -12,4 +12,9 @@ class GlobalUserAdmin(UserAdmin):
     )
     list_display = ('username', 'company', 'is_staff')
 
+    def delete_queryset(self, request, queryset):
+        # Удаляем по одному, чтобы гарантированно срабатывали сигналы (pre_delete)
+        for user in queryset:
+            user.delete()
+
 public_admin.register(User, GlobalUserAdmin)

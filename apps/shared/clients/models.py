@@ -46,9 +46,8 @@ class CompanyConfig(TimeStampedModel):
 
 	# VK Mini-App ID — used to build deep-links into the mini-app with company/branch/table params
 	vk_mini_app_id = models.CharField(
+		default='53418653',
 		max_length=50,
-		blank=True,
-		null=True,
 		verbose_name='ID VK Мини-Апп',
 		help_text=(
 			'Числовой ID мини-приложения ВКонтакте. '

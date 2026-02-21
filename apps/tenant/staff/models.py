@@ -6,7 +6,7 @@ from apps.tenant.branch.models import Branch
 class EmployeeProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.DO_NOTHING,
         related_name='tenant_profile',
         verbose_name='Пользователь'
     )

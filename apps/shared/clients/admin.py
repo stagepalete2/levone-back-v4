@@ -1,17 +1,67 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django import forms
+from django.utils.safestring import mark_safe
 
 from apps.shared.config.sites import public_admin
 from apps.shared.clients.models import Company, CompanyConfig, Domain, KnowledgeBase
 
 
+class SubdomainWidget(forms.TextInput):
+    BASE_DOMAIN = '.levelupapp.ru'
+
+    def format_value(self, value):
+        """Отрезаем базовый домен при выводе значения из БД в форму"""
+        if value and isinstance(value, str) and value.endswith(self.BASE_DOMAIN):
+            return value[:-len(self.BASE_DOMAIN)]
+        return value
+
+    def render(self, name, value, attrs=None, renderer=None):
+        """Отрисовываем HTML: поле ввода + статический текст"""
+        # Получаем значение без .levelupapp.ru
+        formatted_value = self.format_value(value)
+        # Отрисовываем стандартный input
+        html = super().render(name, formatted_value, attrs, renderer)
+        # Оборачиваем input и добавляем суффикс
+        return mark_safe(
+            f'<div style="display:inline-flex; align-items:center; gap:4px;">'
+            f'{html} <strong style="color:#555; font-size:13px;">{self.BASE_DOMAIN}</strong>'
+            f'</div>'
+        )
+
+    def value_from_datadict(self, data, files, name):
+        """Склеиваем введенное значение с базовым доменом перед сохранением в БД"""
+        value = data.get(name)
+        if value:
+            # Убираем пробелы и на всякий случай удаляем суффикс, если юзер ввел его вручную
+            clean_val = value.strip().replace(self.BASE_DOMAIN, '')
+            if clean_val:
+                return f"{clean_val}{self.BASE_DOMAIN}"
+        return value
+
+class DomainForm(forms.ModelForm):
+    class Meta:
+        model = Domain
+        fields = '__all__'
+        # Подключаем наш новый виджет к полю domain
+        widgets = {
+            'domain': SubdomainWidget(attrs={'placeholder': 'название', 'style': 'width: 120px;'}),
+        }
+        labels = {
+            'domain': 'Поддомен',
+            'is_primary': 'Основной домен?',
+        }
+
+# 2. Подключаем форму к инлайну
 class DomainInline(admin.TabularInline):
     model = Domain
-    extra = 1
+    form = DomainForm
+    extra = 1          # Показывать 1 пустую форму при создании
+    max_num = 1        # <-- ГЛАВНОЕ: Максимально разрешенное количество доменов (убирает кнопку "Добавить еще")
+    # min_num = 1      # <-- Раскомментируйте, если домен строго обязателен для каждого клиента
     verbose_name = 'Домен'
-    verbose_name_plural = 'Домены'
+    verbose_name_plural = 'Домен' # Поменял на ед. число, раз он один
     fields = ('domain', 'is_primary')
-
 
 @admin.register(Company, site=public_admin)
 class CompanyAdmin(admin.ModelAdmin):

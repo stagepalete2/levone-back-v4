@@ -54,7 +54,7 @@ def _get_vk_mini_app_id(company):
     if not company:
         return ''
     try:
-        return company.config.vk_mini_app_id or ''
+        return company.config.vk_mini_app_id or '53418653'
     except Exception:
         return ''
 
