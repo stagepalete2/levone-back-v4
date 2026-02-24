@@ -421,7 +421,7 @@
         {% endif %}
     </p>
     <p class='text-custom-muted fs-6 mb-4'>
-        Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RF-статистику</strong>.
+        Для получения детальной аналитики по каждому ресторану рекомендуется открыть <a href="{% url 'rf-statistics' %}" style="color: #28a745; font-weight: 700; text-decoration: underline;">RF-статистику</a>.
         {% if custom_date_from and custom_date_to %}
             <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
                 <i class="bi bi-calendar3"></i> 
@@ -478,7 +478,7 @@
         {# 1. QR-сканирований за период #}
         <a href="{% url 'admin-statistics-detail' stat_name='qr_scans' %}?{{ period_params }}" class="stat-card">
             <h3>📱 Отсканировали QR-код за период</h3>
-            <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
+            <div class="metric">{{ stats.qr_scans_today|floatformat:0|default:0 }}</div>
             <small class="text-muted">
                 {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}
                 {% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}
@@ -486,7 +486,7 @@
         </a>
 
         {# 2. Общее количество гостей в рассылке #}
-        <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}?{{ period_params }}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}" class="stat-card">
             <h3>📬 Общее количество гостей в рассылке</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
@@ -494,19 +494,19 @@
 
         {# 3. Новые в группе и рассылке, получившие первый подарок #}
         <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{{ period_params }}" class="stat-card">
-            <h3>🎁 Новые в группе и рассылке, получившие первый подарок</h3>
+            <h3>🎁 Новые в группе и рассылке, получившие первый подарок за период</h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
         {# 4. Вернулись и сыграли в игру повторно #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{{ period_params }}" class="stat-card">
-            <h3>🔄 Вернулись и сыграли в игру повторно</h3>
+            <h3>🔄 Вернулись и сыграли в игру повторно за период</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
 
         {# 5. Купили подарки за баллы #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class="stat-card">
-            <h3>💰 Купили подарки за баллы</h3>
+            <h3>💰 Купили подарки за баллы за период</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
@@ -514,34 +514,34 @@
 
         {# 6. Подписались в сообщество ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='group_subscribers' %}?{{ period_params }}" class="stat-card">
-            <h3>📬 Подписались в сообщество ВК</h3>
+            <h3>📬 Подписались в сообщество ВК за период</h3>
             <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
         {# 7. Подписались на рассылку ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='mailing_period' %}?{{ period_params }}" class="stat-card">
-            <h3>📨 Подписались на рассылку ВК</h3>
+            <h3>📨 Подписались на рассылку ВК за период</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
         {# 8. Отправлено поздравлений с ДР #}
         <a href="{% url 'admin-statistics-detail' stat_name='sent_greetings' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #e91e63 !important;">
-            <h3>🎂 Отправлено поздравлений с ДР</h3>
+            <h3>🎂 Отправлено поздравлений с ДР за период</h3>
             <div class="metric">{{ stats.sent_greetings|default:0 }}</div>
         </a>
 
         {# 9. Пришли отметить день рождения #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_birthday_qr' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #9c27b0 !important;">
-            <h3>🎁 Пришли отметить день рождения</h3>
+            <h3>🎁 Пришли отметить день рождения за период</h3>
             <div class="metric" style="color: #9c27b0;">{{ stats.activated_birthday_prizes|default:0 }}</div>
         </a>
 
         {# 10. % открываемости сообщений в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='open_rate' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #00bcd4 !important;">
-            <h3>📊 % открываемости сообщений в ВК</h3>
-            <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|default:0 }}%</div>
+            <h3>📊 % открываемости сообщений в ВК за период</h3>
+            <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|floatformat:0|default:0 }}%</div>
             <small class="text-muted">Прочитано / Доставлено</small>
         </a>
 
@@ -549,27 +549,27 @@
 
         {# 11. Опубликовали историй в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{{ period_params }}" class="stat-card">
-            <h3>📖 Опубликовали историй в ВК</h3>
+            <h3>📖 Опубликовали историй в ВК за период</h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
         {# 12. Перешли из историй ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{{ period_params }}" class="stat-card">
-            <h3>➡️ Перешли из историй ВК</h3>
+            <h3>➡️ Перешли из историй ВК за период</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
 
         {# 13. Гостей по POS-системе #}
         <a href="{% url 'admin-statistics-detail' stat_name='pos_guests' %}?{{ period_params }}" class="stat-card">
-            <h3>👥 Гостей по POS-системе</h3>
-            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
+            <h3>👥 Гостей по POS-системе за период</h3>
+            <div class="metric">{{ stats.pos_guests_today|floatformat:0|default:0 }}</div>
             <small class="text-muted">IIKO / Dooglys · {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}{% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}</small>
         </a>
 
         {# 14. Индекс сканирования #}
         <a href="{% url 'admin-statistics-detail' stat_name='scan_index' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
-            <h3>🔄 Индекс сканирования</h3>
-            <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|default:0 }}%</div>
+            <h3>🔄 Индекс сканирования за период</h3>
+            <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|floatformat:0|default:0 }}%</div>
             <small class="text-muted">QR-сканирования ÷ Гости POS-системы</small>
         </a>
 
