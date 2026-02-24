@@ -179,8 +179,8 @@
                     <div class="segment-count">{{ segment.guests_count }}</div>
                     <div class="segment-percent">{% if unique_clients > 0 %}{% widthratio segment.guests_count unique_clients 100 %}{% else %}0{% endif %}%</div>
                     <div class="segment-actions">
-                        <button class="seg-btn seg-btn-export" onclick="event.stopPropagation();exportSenler('{{ segment.code }}','{{ segment.name }}')">Выгрузить</button>
-                        <button class="seg-btn seg-btn-mail" onclick="event.stopPropagation();openMailingModal('{{ segment.code }}','{{ segment.name }}',{{ segment.guests_count }})">Рассылка</button>
+                        <button class="seg-btn seg-btn-export" onclick="event.stopPropagation();exportSenler('{{ segment.code }}','{{ segment.name }}')">Выгрузить (Senler)</button>
+                        <button class="seg-btn seg-btn-mail" onclick="event.stopPropagation();openMailingModal('{{ segment.code }}','{{ segment.name }}',{{ segment.guests_count }})">Отправить рассылку</button>
                     </div>
                 </div>
             </div>
