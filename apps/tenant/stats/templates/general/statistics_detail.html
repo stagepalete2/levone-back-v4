@@ -320,7 +320,7 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.invited_by %}
+                            {% if client.is_allowed_message %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
