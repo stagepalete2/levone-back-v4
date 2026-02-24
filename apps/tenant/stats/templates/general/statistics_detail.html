@@ -164,6 +164,54 @@
         background: #28a745;
         color: #fff;
     }
+
+    /* ─── Custom Date Range Picker (compact) ─── */
+    .date-range-picker-sm {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 6px 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .date-range-picker-sm label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #666;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .date-range-picker-sm input[type="date"] {
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        padding: 4px 8px;
+        font-size: 0.78rem;
+        color: #333;
+        min-width: 130px;
+    }
+    .date-range-picker-sm input[type="date"]:focus {
+        outline: none;
+        border-color: #28a745;
+        box-shadow: 0 0 0 2px rgba(40,167,69,0.1);
+    }
+    .date-range-picker-sm button {
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        padding: 4px 14px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .date-range-picker-sm button:hover { background: #218838; }
+    .date-range-picker-sm .reset-btn { background: #6c757d; padding: 4px 10px; }
+    .date-range-picker-sm .reset-btn:hover { background: #5a6268; }
 </style>
 {% endblock %}
 
@@ -191,21 +239,46 @@
             <p class="text-main-muted small mb-0">Детальный список клиентов по выбранному показателю</p>
         </div>
 
-        <div class="d-flex align-items-center gap-3">
-            {# Период #}
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            {# Быстрые кнопки периода #}
             <div class="period-selector-sm">
                 {% for code, meta in period_choices.items %}
-                    <a href="?period={{ code }}"
-                       class="{% if code == period_code %}active{% endif %}">{{ meta.0 }}</a>
+                    <a href="?period={{ code }}{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}"
+                       class="{% if code == period_code and not custom_date_from %}active{% endif %}">{{ meta.0 }}</a>
                 {% endfor %}
             </div>
 
+            {# Кастомный диапазон дат #}
+            <div class="date-range-picker-sm">
+                <label>📅</label>
+                <input type="date" id="detail_date_from"
+                       value="{{ custom_date_from|default:'' }}" placeholder="От">
+                <span style="color:#999">—</span>
+                <input type="date" id="detail_date_to"
+                       value="{{ custom_date_to|default:'' }}" placeholder="До">
+                <button type="button" onclick="applyDetailPeriod()">Применить</button>
+                {% if custom_date_from %}
+                <button type="button" class="reset-btn" onclick="resetDetailPeriod()">Сбросить</button>
+                {% endif %}
+            </div>
+
             <div class="badge bg-white border text-dark py-2 px-3 shadow-sm" style="border-radius: 8px;">
-                Всего записей: <span class="fw-bold" style="color: #28a745;">{{ clients|length }}</span>
+                Всего: <span class="fw-bold" style="color: #28a745;">{{ clients|length }}</span>
             </div>
         </div>
     </div>
 
+    {% if external_stat %}
+    {# Статистика из внешних систем (VK API / POS) — список гостей недоступен #}
+    <div class="custom-table-container p-5 text-center">
+        <div class="mb-3 fs-1">🔌</div>
+        <h5 class="fw-bold text-main-black mb-2">Данные из внешней системы</h5>
+        <p class="text-main-muted mb-0">
+            Этот показатель рассчитывается на основе данных VK API или POS-системы.<br>
+            Детальный список гостей для этой метрики недоступен.
+        </p>
+    </div>
+    {% else %}
     <div class="custom-table-container">
         <div class="table-responsive">
             <table class="table align-middle">
@@ -213,10 +286,9 @@
                     <tr>
                         <th>Клиент</th>
                         <th>Дата рождения</th>
-                        <th class="text-center">Стория</th>
+                        <th class="text-center">Сторис</th>
                         <th class="text-center">Сообщество</th>
                         <th class="text-center">Инвайт</th>
-                        <th class="text-end">Действие</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -234,42 +306,30 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.isStoryUploaded %}
+                            {% if client.is_story_uploaded %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.isJoinedCommunity %}
+                            {% if client.is_joined_community %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.isReffered %}
+                            {% if client.invited_by %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">
-                            {% if client.client.vk_user_id %}
-                                <a href="{% url 'away' vk_user_id=client.client.vk_user_id %}" target="_blank"
-                                class="btn btn-sm btn-vk px-3 shadow-sm">
-                                    Профиль VK
-                                </a>
-                            {% else %}
-                                <span class="text-main-muted small pe-3">
-                                    ID не указан
-                                </span>
                             {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center py-5 text-main-muted">
+                        <td colspan="5" class="text-center py-5 text-main-muted">
                             <div class="mb-2 fs-2">📂</div>
                             Данные отсутствуют
                         </td>
@@ -279,5 +339,31 @@
             </table>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
+
+<script>
+    function applyDetailPeriod() {
+        const dateFrom = document.getElementById('detail_date_from').value;
+        const dateTo = document.getElementById('detail_date_to').value;
+        if (!dateFrom || !dateTo) { alert('Выберите обе даты'); return; }
+        if (new Date(dateFrom) > new Date(dateTo)) { alert('Дата начала не может быть позже окончания'); return; }
+        const branch = '{{ selected_branch_id|default:"" }}';
+        let url = '?custom_date_from=' + dateFrom + '&custom_date_to=' + dateTo;
+        if (branch) url += '&branch=' + branch;
+        window.location.href = url;
+    }
+    function resetDetailPeriod() {
+        const branch = '{{ selected_branch_id|default:"" }}';
+        let url = '?period=30d';
+        if (branch) url += '&branch=' + branch;
+        window.location.href = url;
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        ['detail_date_from', 'detail_date_to'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.addEventListener('keypress', function(e) { if (e.key === 'Enter') applyDetailPeriod(); });
+        });
+    });
+</script>

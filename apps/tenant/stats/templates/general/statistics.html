@@ -371,8 +371,6 @@
             {% endif %}
         </div>
 
-        
-
         <div class="d-flex flex-column gap-2 align-items-end">
             {# ── Переключатель филиала ── #}
             <div class="branch-selector">
@@ -390,7 +388,6 @@
 
             {# ── Переключатель периода и календарь ── #}
             <div class="period-controls-wrapper">
-                {# Быстрые кнопки периодов #}
                 <div class="period-selector">
                     {% for code, meta in period_choices.items %}
                         <a href="?{% if selected_branch_id %}branch={{ selected_branch_id }}&{% endif %}period={{ code }}"
@@ -400,22 +397,13 @@
                     {% endfor %}
                 </div>
                 
-                {# Календарь для пользовательского выбора #}
                 <div class="date-range-picker">
                     <label for="custom_date_from">📅 Период:</label>
-                    <input 
-                        type="date" 
-                        id="custom_date_from" 
-                        name="custom_date_from" 
-                        value="{{ custom_date_from|default:'' }}"
-                        placeholder="От">
+                    <input type="date" id="custom_date_from" name="custom_date_from"
+                        value="{{ custom_date_from|default:'' }}" placeholder="От">
                     <span style="color: #999;">—</span>
-                    <input 
-                        type="date" 
-                        id="custom_date_to" 
-                        name="custom_date_to" 
-                        value="{{ custom_date_to|default:'' }}"
-                        placeholder="До">
+                    <input type="date" id="custom_date_to" name="custom_date_to"
+                        value="{{ custom_date_to|default:'' }}" placeholder="До">
                     <button type="button" onclick="applyCustomPeriod()">Применить</button>
                     {% if custom_date_from %}
                     <button type="button" class="reset-btn" onclick="resetPeriod()">Сбросить</button>
@@ -433,7 +421,7 @@
         {% endif %}
     </p>
     <p class='text-custom-muted fs-6 mb-4'>
-        Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RFM-статистику</strong>.
+        Для получения детальной аналитики по каждому ресторану рекомендуется открыть <strong>RF-статистику</strong>.
         {% if custom_date_from and custom_date_to %}
             <span class="badge bg-light text-dark border ms-1" style="font-size:.78rem">
                 <i class="bi bi-calendar3"></i> 
@@ -447,15 +435,11 @@
         {% endif %}
     </p>
 
-    {# ── Таблица POS по филиалам удалена: данные уже отображены в метриках ── #}
-
     {# ── Анализ отзывов из ВК ── #}
     {% if stats.testimonials.total %}
     <div class="reviews-panel mb-4">
         <div class="reviews-panel-header">
-            <h3 class="reviews-panel-title">
-                💬 АНАЛИЗ ОТЗЫВОВ ИЗ ВК
-            </h3>
+            <h3 class="reviews-panel-title">💬 АНАЛИЗ ОТЗЫВОВ ИЗ ВК</h3>
             <span class="badge bg-light text-dark border" style="font-size:.78rem">
                 <i class="bi bi-calendar3"></i>
                 {% if custom_date_from and custom_date_to %}
@@ -486,102 +470,109 @@
     </div>
     {% endif %}
 
+    {# ══ КАРТОЧКИ СТАТИСТИКИ — по схеме (14 карточек) ══ #}
     <div class="dashboard-grid">
-        {# period_params is built in the view (StatisticsView.get_context_data) to avoid {% with %} scoping issues #}
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients' %}?{{ period_params }}" class="stat-card">
-            <h3>Оцифрованные гости всего</h3>
-            <div class="metric">{{ stats.total_clients|default:0 }}</div>
+        {# ── РЯД 1 ── #}
+
+        {# 1. QR-сканирований за период #}
+        <a href="{% url 'admin-statistics-detail' stat_name='qr_scans' %}?{{ period_params }}" class="stat-card">
+            <h3>📱 Отсканировали QR-код за период</h3>
+            <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
+            <small class="text-muted">
+                {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}
+                {% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}
+            </small>
         </a>
 
-        <a href="{% url 'admin-statistics-detail' stat_name='total_clients_last_month' %}?{{ period_params }}" class="stat-card">
-            <h3>Новые за период</h3>
-            <div class="metric" style="color: #28a745;">{{ stats.total_clients_period|default:0 }}</div>
+        {# 2. Общее количество гостей в рассылке #}
+        <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}?{{ period_params }}" class="stat-card">
+            <h3>📬 Общее количество гостей в рассылке</h3>
+            <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
+            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
+        {# 3. Новые в группе и рассылке, получившие первый подарок #}
         <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{{ period_params }}" class="stat-card">
-            <h3>Новые + 1-й подарок</h3>
+            <h3>🎁 Новые в группе и рассылке, получившие первый подарок</h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
+        {# 4. Вернулись и сыграли в игру повторно #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{{ period_params }}" class="stat-card">
-            <h3>Вернулись повторно</h3>
+            <h3>🔄 Вернулись и сыграли в игру повторно</h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
 
-        <div class="stat-card" style="border-left: 4px solid #e91e63 !important;">
-            <h3>🎂 Отправлено поздравлений ДР</h3>
-            <div class="metric">{{ stats.sent_greetings|default:0 }}</div>
-        </div>
-
-        <div class="stat-card" style="border-left: 4px solid #9c27b0 !important;">
-            <h3>🎁 Активировано подарков ДР</h3>
-            <div class="metric" style="color: #9c27b0;">{{ stats.activated_birthday_prizes|default:0 }}</div>
-        </div>
-
-        <div class="stat-card" style="border-left: 4px solid #00bcd4 !important;">
-            <h3>📨 % открываемости</h3>
-            <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|default:0 }}%</div>
-            <small class="text-muted">Прочитано / Доставлено</small>
-        </div>
-
-        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class='stat-card'>
-            <h3>Купили подарки за баллы</h3>
+        {# 5. Купили подарки за баллы #}
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class="stat-card">
+            <h3>💰 Купили подарки за баллы</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
+        {# ── РЯД 2 ── #}
+
+        {# 6. Подписались в сообщество ВК #}
+        <a href="{% url 'admin-statistics-detail' stat_name='group_subscribers' %}?{{ period_params }}" class="stat-card">
+            <h3>📬 Подписались в сообщество ВК</h3>
+            <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
+            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
+        </a>
+
+        {# 7. Подписались на рассылку ВК #}
+        <a href="{% url 'admin-statistics-detail' stat_name='mailing_period' %}?{{ period_params }}" class="stat-card">
+            <h3>📨 Подписались на рассылку ВК</h3>
+            <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
+            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
+        </a>
+
+        {# 8. Отправлено поздравлений с ДР #}
+        <a href="{% url 'admin-statistics-detail' stat_name='sent_greetings' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #e91e63 !important;">
+            <h3>🎂 Отправлено поздравлений с ДР</h3>
+            <div class="metric">{{ stats.sent_greetings|default:0 }}</div>
+        </a>
+
+        {# 9. Пришли отметить день рождения #}
+        <a href="{% url 'admin-statistics-detail' stat_name='clients_birthday_qr' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #9c27b0 !important;">
+            <h3>🎁 Пришли отметить день рождения</h3>
+            <div class="metric" style="color: #9c27b0;">{{ stats.activated_birthday_prizes|default:0 }}</div>
+        </a>
+
+        {# 10. % открываемости сообщений в ВК #}
+        <a href="{% url 'admin-statistics-detail' stat_name='open_rate' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #00bcd4 !important;">
+            <h3>📊 % открываемости сообщений в ВК</h3>
+            <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|default:0 }}%</div>
+            <small class="text-muted">Прочитано / Доставлено</small>
+        </a>
+
+        {# ── РЯД 3 ── #}
+
+        {# 11. Опубликовали историй в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{{ period_params }}" class="stat-card">
-            <h3>Опубликовали истории</h3>
+            <h3>📖 Опубликовали историй в ВК</h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
+        {# 12. Перешли из историй ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{{ period_params }}" class="stat-card">
-            <h3>Пришли из историй</h3>
+            <h3>➡️ Перешли из историй ВК</h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
 
-        <div class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
+        {# 13. Гостей по POS-системе #}
+        <a href="{% url 'admin-statistics-detail' stat_name='pos_guests' %}?{{ period_params }}" class="stat-card">
+            <h3>👥 Гостей по POS-системе</h3>
+            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
+            <small class="text-muted">IIKO / Dooglys · {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}{% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}</small>
+        </a>
+
+        {# 14. Индекс сканирования #}
+        <a href="{% url 'admin-statistics-detail' stat_name='scan_index' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
             <h3>🔄 Индекс сканирования</h3>
             <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|default:0 }}%</div>
-            <small class="text-muted">QR сканирования ÷ Гости POS системы</small>
-        </div>
+            <small class="text-muted">QR-сканирования ÷ Гости POS-системы</small>
+        </a>
 
-        <div class="stat-card">
-            <h3>📱 QR сканирований за период</h3>
-            <div class="metric">{{ stats.qr_scans_today|default:0 }}</div>
-            <small class="text-muted">
-                {% if custom_date_from and custom_date_to %}
-                    {{ custom_date_from }} — {{ custom_date_to }}
-                {% else %}
-                    {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
-                {% endif %}
-            </small>
-        </div>
-
-        <div class="stat-card">
-            <h3>👥 Гостей по POS системе</h3>
-            <div class="metric">{{ stats.pos_guests_today|default:0 }}</div>
-            <small class="text-muted">
-                IIKO / Dooglys
-                · {% if custom_date_from and custom_date_to %}
-                    {{ custom_date_from }} — {{ custom_date_to }}
-                {% else %}
-                    {% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}
-                {% endif %}
-            </small>
-        </div>
-
-        <div class="stat-card">
-            <h3>📬 Подписались в сообщество VK</h3>
-            <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
-            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
-        </div>
-
-        <div class="stat-card">
-            <h3>📨 Подписались на рассылку</h3>
-            <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
-            {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
-        </div>
     </div>
 
     <div class="row g-4 mb-4">
@@ -641,17 +632,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Global Chart.js Defaults for Light Mode
     Chart.defaults.color = '#555';
     Chart.defaults.font.family = "'Inter', sans-serif";
 
     const commonOptions = {
         responsive: true,
         plugins: {
-            legend: {
-                position: 'bottom',
-                labels: { padding: 15, usePointStyle: true, font: { size: 11 } }
-            }
+            legend: { position: 'bottom', labels: { padding: 15, usePointStyle: true, font: { size: 11 } } }
         },
         borderWidth: 2,
         borderColor: '#ffffff'
@@ -660,193 +647,84 @@
     const total = {{ stats.total_clients|default:0 }};
     const emptyColor = '#f0f0f0';
 
-    // 1. Повторные визиты (на первом месте)
     new Chart(document.getElementById('returnChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Повторно', 'Разово'],
-            datasets: [{
-                data: [{{ stats.clients_returned_second_time|default:0 }}, Math.max(total - {{ stats.clients_returned_second_time|default:0 }}, 0)],
-                backgroundColor: ['#17a2b8', emptyColor]
-            }]
-        },
+        data: { labels: ['Повторно', 'Разово'], datasets: [{ data: [{{ stats.clients_returned_second_time|default:0 }}, Math.max(total - {{ stats.clients_returned_second_time|default:0 }}, 0)], backgroundColor: ['#17a2b8', emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 2. Источники: из кафе/из опубликованных историй
     new Chart(document.getElementById('referralChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Из историй', 'Из кафе'],
-            datasets: [{
-                data: [{{ stats.clients_from_referral|default:0 }}, Math.max(total - {{ stats.clients_from_referral|default:0 }}, 0)],
-                backgroundColor: ['#28a745', emptyColor]
-            }]
-        },
+        data: { labels: ['Из историй', 'Из кафе'], datasets: [{ data: [{{ stats.clients_from_referral|default:0 }}, Math.max(total - {{ stats.clients_from_referral|default:0 }}, 0)], backgroundColor: ['#28a745', emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 3. Истории: опубликовали/не опубликовали
     new Chart(document.getElementById('activityChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Опубликовали', 'Не опубликовали'],
-            datasets: [{
-                data: [{{ stats.clients_posted_story|default:0 }}, Math.max(total - {{ stats.clients_posted_story|default:0 }}, 0)],
-                backgroundColor: ['#dc3545', emptyColor]
-            }]
-        },
+        data: { labels: ['Опубликовали', 'Не опубликовали'], datasets: [{ data: [{{ stats.clients_posted_story|default:0 }}, Math.max(total - {{ stats.clients_posted_story|default:0 }}, 0)], backgroundColor: ['#dc3545', emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 4. Подарки: только бесплатный/покупали за баллы
     new Chart(document.getElementById('engagementChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Только бесплатный', 'Покупали за баллы'],
-            datasets: [{
-                data: [
-                    {{ stats.new_clients_received_super_prize|default:0 }},
-                    {{ stats.clients_bought_prizes|default:0 }}
-                ],
-                backgroundColor: ['#ffc107', '#6610f2']
-            }]
-        },
+        data: { labels: ['Только бесплатный', 'Покупали за баллы'], datasets: [{ data: [{{ stats.new_clients_received_super_prize|default:0 }}, {{ stats.clients_bought_prizes|default:0 }}], backgroundColor: ['#ffc107', '#6610f2'] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 5. Вовлеченность персонала/Качество рекламного носителя
     const staffIndex = {{ stats.staff_engagement_index|default:0 }};
     new Chart(document.getElementById('staffEngagementChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Вовлечённость', 'Остальные'],
-            datasets: [{
-                data: [staffIndex, Math.max(100 - staffIndex, 0)],
-                backgroundColor: ['#e91e63', emptyColor]
-            }]
-        },
-        options: {
-            ...commonOptions,
-            cutout: '75%',
-            plugins: {
-                ...commonOptions.plugins,
-                centerText: true
-            }
-        },
-        plugins: [{
-            id: 'centerText',
-            afterDraw(chart) {
-                const { ctx, chartArea: { width, height, top } } = chart;
-                ctx.save();
-                ctx.font = 'bold 1.5rem Inter, sans-serif';
-                ctx.fillStyle = '#e91e63';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(staffIndex + '%', width / 2, top + height / 2);
-                ctx.restore();
-            }
-        }]
+        data: { labels: ['Вовлечённость', 'Остальные'], datasets: [{ data: [staffIndex, Math.max(100 - staffIndex, 0)], backgroundColor: ['#e91e63', emptyColor] }] },
+        options: { ...commonOptions, cutout: '75%' },
+        plugins: [{ id: 'centerText', afterDraw(chart) {
+            const { ctx, chartArea: { width, height, top } } = chart;
+            ctx.save(); ctx.font = 'bold 1.5rem Inter, sans-serif'; ctx.fillStyle = '#e91e63';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(staffIndex + '%', width / 2, top + height / 2); ctx.restore();
+        }}]
     });
 
-    // 6. Индекс качества: негативный/позитивный/частично негативный
-    const tPositive = {{ stats.testimonials.positive|default:0 }};
-    const tNegative = {{ stats.testimonials.negative|default:0 }};
-    const tNeutral = {{ stats.testimonials.neutral|default:0 }};
-    const tTotal = tPositive + tNegative + tNeutral;
+    const tP = {{ stats.testimonials.positive|default:0 }}, tN = {{ stats.testimonials.negative|default:0 }}, tNu = {{ stats.testimonials.neutral|default:0 }};
+    const tT = tP + tN + tNu;
     new Chart(document.getElementById('qualityIndexChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Позитивный', 'Негативный', 'Частично негативный'],
-            datasets: [{
-                data: tTotal > 0 ? [tPositive, tNegative, tNeutral] : [0, 0, 1],
-                backgroundColor: tTotal > 0 ? ['#28a745', '#dc3545', '#fd7e14'] : [emptyColor, emptyColor, emptyColor]
-            }]
-        },
+        data: { labels: ['Позитивный', 'Негативный', 'Частично негативный'], datasets: [{ data: tT > 0 ? [tP, tN, tNu] : [0,0,1], backgroundColor: tT > 0 ? ['#28a745','#dc3545','#fd7e14'] : [emptyColor,emptyColor,emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 7. Отзывы: оставили/не оставили
     const leftReview = {{ stats.clients_left_review|default:0 }};
     new Chart(document.getElementById('reviewsChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Оставили', 'Не оставили'],
-            datasets: [{
-                data: [leftReview, Math.max(total - leftReview, 0)],
-                backgroundColor: ['#6f42c1', emptyColor]
-            }]
-        },
+        data: { labels: ['Оставили', 'Не оставили'], datasets: [{ data: [leftReview, Math.max(total - leftReview, 0)], backgroundColor: ['#6f42c1', emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 
-    // 8. Задания: Выполняли/не выполняли
-    const questsDone = {{ stats.quests_completed|default:0 }};
-    const questsNotDone = {{ stats.quests_not_completed|default:0 }};
-    const questsTotal = questsDone + questsNotDone;
+    const qD = {{ stats.quests_completed|default:0 }}, qND = {{ stats.quests_not_completed|default:0 }};
     new Chart(document.getElementById('questsChart'), {
         type: 'doughnut',
-        data: {
-            labels: ['Выполняли', 'Не выполняли'],
-            datasets: [{
-                data: questsTotal > 0 ? [questsDone, questsNotDone] : [0, 1],
-                backgroundColor: questsTotal > 0 ? ['#00bcd4', emptyColor] : [emptyColor, emptyColor]
-            }]
-        },
+        data: { labels: ['Выполняли', 'Не выполняли'], datasets: [{ data: (qD+qND)>0 ? [qD,qND] : [0,1], backgroundColor: (qD+qND)>0 ? ['#00bcd4',emptyColor] : [emptyColor,emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 </script>
 
 <script>
-    // Обработка пользовательского периода
     function applyCustomPeriod() {
         const dateFrom = document.getElementById('custom_date_from').value;
         const dateTo = document.getElementById('custom_date_to').value;
-        
-        if (!dateFrom || !dateTo) {
-            alert('Пожалуйста, выберите обе даты');
-            return;
-        }
-        
-        // Проверка, что dateFrom не позже dateTo
-        if (new Date(dateFrom) > new Date(dateTo)) {
-            alert('Дата начала не может быть позже даты окончания');
-            return;
-        }
-        
-        // Формируем URL с параметрами
+        if (!dateFrom || !dateTo) { alert('Пожалуйста, выберите обе даты'); return; }
+        if (new Date(dateFrom) > new Date(dateTo)) { alert('Дата начала не может быть позже даты окончания'); return; }
         const branchParam = '{{ selected_branch_id|default:"" }}';
         let url = '?custom_date_from=' + dateFrom + '&custom_date_to=' + dateTo;
-        
-        if (branchParam) {
-            url += '&branch=' + branchParam;
-        }
-        
+        if (branchParam) url += '&branch=' + branchParam;
         window.location.href = url;
     }
-    
     function resetPeriod() {
         const branchParam = '{{ selected_branch_id|default:"" }}';
         let url = '?period={{ DEFAULT_PERIOD|default:"30d" }}';
-        
-        if (branchParam) {
-            url += '&branch=' + branchParam;
-        }
-        
+        if (branchParam) url += '&branch=' + branchParam;
         window.location.href = url;
     }
-    
-    // Поддержка Enter в полях дат
-    document.getElementById('custom_date_from').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            applyCustomPeriod();
-        }
-    });
-    
-    document.getElementById('custom_date_to').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            applyCustomPeriod();
-        }
-    });
+    document.getElementById('custom_date_from').addEventListener('keypress', e => { if (e.key==='Enter') applyCustomPeriod(); });
+    document.getElementById('custom_date_to').addEventListener('keypress', e => { if (e.key==='Enter') applyCustomPeriod(); });
 </script>
 {% endblock %}

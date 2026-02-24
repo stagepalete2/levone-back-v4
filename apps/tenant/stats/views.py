@@ -149,8 +149,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         context.update(branch_ctx)
 
         date_from = period_ctx['date_from']
-
-        # Базовый QuerySet
+        date_to = period_ctx['date_to']
         qs = ClientBranch.objects.all()
         
         # Фильтр по филиалу если выбран
@@ -162,68 +161,117 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         else:
             period_qs = qs
 
-        # --- ПОДГОТОВКА СЛОЖНЫХ ФИЛЬТРОВ (ленивые — считаем только нужный) ---
+        # Базовый QuerySet
+        qs = ClientBranch.objects.all()
+        
+        # Фильтр по филиалу если выбран
+        if branch_ctx.get('selected_branch_id'):
+            qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
 
-        # --- КАРТА СТАТИСТИКИ (Mapping) ---
+        # period_qs с фильтрацией по обеим датам
+        if date_from and date_to:
+            period_qs = qs.filter(created_at__gte=date_from, created_at__lte=date_to)
+        elif date_from:
+            period_qs = qs.filter(created_at__gte=date_from)
+        else:
+            period_qs = qs
+
+        branch_id = branch_ctx.get('selected_branch_id')
+        if date_from and date_to:
+            period_qs = qs.filter(created_at__gte=date_from, created_at__lte=date_to)
+        elif date_from:
+            period_qs = qs.filter(created_at__gte=date_from)
+        else:
+            period_qs = qs
+
+        branch_id = branch_ctx.get('selected_branch_id')
+
+        # --- КАРТА СТАТИСТИКИ ---
         title_map = {
-            # 1. Всего клиентов (не зависит от периода)
-            "total_clients": (
-                'Общее количество оцифрованных гостей', 
-                qs
+            # 1. QR-сканирований за период
+            "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
+
+            # 2. Общее количество гостей в рассылке (подписались через приложение)
+            "mailing_subscribers": (
+                'Общее количество гостей в рассылке',
+                qs.filter(is_joined_community=True)
             ),
 
-            # 2. Новые за период
-            "total_clients_last_month": (
-                'Новые за период', 
-                period_qs
-            ),
-
-            # 3. Получили суперприз (GAME)
+            # 3. Новые в группе и рассылке, получившие первый подарок
             "new_clients_received_super_prize": (
-                'Выиграли суперприз', 
+                'Новые в группе и рассылке, получившие первый подарок',
                 period_qs.filter(
                     is_joined_community=True,
                     superprizes__acquired_from='GAME'
                 )
             ),
 
-            # 4. Вернулись 2-й раз
-            "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, branch_ctx.get('selected_branch_id')),
+            # 4. Вернулись и сыграли в игру повторно
+            "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
 
-            # 5. Скан в День Рождения
-            "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, branch_ctx.get('selected_branch_id')),
-
-            # 6. Купили подарки (Трата коинов)
+            # 5. Купили подарки за баллы
             "clients_bought_prizes": (
-                'Купили подарки', 
-                self._get_bought_prizes_qs(qs, date_from)
+                'Купили подарки за баллы',
+                self._get_bought_prizes_qs(qs, date_from, date_to)
             ),
 
-            # 7. Выложили сторис
+            # 6. Подписались в сообщество ВК
+            "group_subscribers": (
+                'Подписались в сообщество ВК',
+                qs.filter(is_joined_community=True)
+            ),
+
+            # 7. Подписались на рассылку ВК (через наше приложение)
+            "mailing_period": (
+                'Подписались на рассылку ВК',
+                period_qs.filter(is_joined_community=True)
+            ),
+
+            # 8. Отправлено поздравлений с ДР
+            "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
+
+            # 9. Пришли отметить день рождения
+            "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
+
+            # 10. % открываемости — клиенты прочитавшие сообщение
+            "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
+
+            # 11. Опубликовали историй в ВК
             "clients_posted_story": (
-                'Опубликовали истории', 
+                'Опубликовали историй в ВК',
                 period_qs.filter(is_story_uploaded=True)
             ),
 
-            # 8. Рефералы
+            # 12. Перешли из историй ВК
             "clients_from_referral": (
-                'Перешли по реферальной ссылке', 
+                'Перешли из историй ВК',
                 period_qs.filter(invited_by__isnull=False)
             ),
+
+            # 13. Гостей по POS-системе (внешние данные — нет прямого QS)
+            # 14. Индекс сканирования (внешние данные)
+        }
+
+        # Статистика из внешних POS-систем — список гостей недоступен
+        external_stats = {
+            "pos_guests":   'Гостей по POS-системе',
+            "scan_index":   'Индекс сканирования',
         }
 
         entry = title_map.get(stat_name)
 
         if entry is not None:
             if callable(entry):
-                # Ленивые тяжёлые запросы
                 title, filtered_qs = entry()
             else:
                 title, filtered_qs = entry
-
             context['stat'] = title
             context["clients"] = filtered_qs.distinct()
-        
+        elif stat_name in external_stats:
+            context['stat'] = external_stats[stat_name]
+            context['clients'] = ClientBranch.objects.none()
+            context['external_stat'] = True
+
         context["stat_name"] = stat_name
         context["breadcrumbs"] = [
             {"title": "Домой", "url": reverse("admin:index")},
@@ -235,22 +283,23 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     # ── Вспомогательные методы (вынесены, чтобы не считать всё подряд) ──
 
     @staticmethod
-    def _get_returned_clients(qs, date_from, branch_id=None):
+    def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
+        if date_to:
+            attempt_filters['created_at__lte'] = date_to
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
-            
         repeat_client_ids = ClientAttempt.objects.filter(
             **attempt_filters
         ).values('client').annotate(
             attempt_count=Count('id')
         ).filter(attempt_count__gte=2).values_list('client', flat=True)
-        return ('Вернулись повторно', qs.filter(id__in=repeat_client_ids))
+        return ('Вернулись и сыграли в игру повторно', qs.filter(id__in=repeat_client_ids))
 
     @staticmethod
-    def _get_birthday_clients(qs, date_from, branch_id=None):
+    def _get_birthday_clients(qs, date_from, date_to=None, branch_id=None):
         filters = Q(
             client__birth_date__isnull=False,
             created_at__day=F('client__birth_date__day'),
@@ -258,18 +307,63 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         )
         if date_from:
             filters &= Q(created_at__gte=date_from)
+        if date_to:
+            filters &= Q(created_at__lte=date_to)
         if branch_id:
             filters &= Q(branch_id=branch_id)
-            
         birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
-        return ('Сканировали в День Рождения', qs.filter(id__in=birthday_attempt_ids))
+        return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
 
     @staticmethod
-    def _get_bought_prizes_qs(qs, date_from):
+    def _get_bought_prizes_qs(qs, date_from, date_to=None):
         expense_filter = Q(transactions__type="EXPENSE")
         if date_from:
             expense_filter &= Q(transactions__created_at__gte=date_from)
+        if date_to:
+            expense_filter &= Q(transactions__created_at__lte=date_to)
         return qs.filter(expense_filter)
+
+    @staticmethod
+    def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
+        """Клиенты, отсканировавшие QR за период (через ClientBranchVisit)."""
+        from apps.tenant.branch.models import ClientBranchVisit
+        visit_filters = Q()
+        if date_from:
+            visit_filters &= Q(created_at__gte=date_from)
+        if date_to:
+            visit_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            visit_filters &= Q(branch_id=branch_id)
+        scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
+        return ('Отсканировали QR-код за период', qs.filter(id__in=scan_ids))
+
+    @staticmethod
+    def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
+        """Клиенты, получившие поздравление с ДР (MessageLog с birthday-типами)."""
+        from apps.tenant.senler.models import MessageLog
+        log_filters = Q(campaign__message_type__in=['birthday_today', 'birthday_7days', 'birthday_1day'])
+        if date_from:
+            log_filters &= Q(created_at__gte=date_from)
+        if date_to:
+            log_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            log_filters &= Q(client__branch_id=branch_id)
+        client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
+        return ('Отправлено поздравлений с ДР', qs.filter(id__in=client_ids))
+
+    @staticmethod
+    def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
+        """Клиенты, прочитавшие хотя бы одно сообщение за период (открываемость)."""
+        from apps.tenant.senler.models import MessageLog
+        log_filters = Q(is_read=True)
+        if date_from:
+            log_filters &= Q(created_at__gte=date_from)
+        if date_to:
+            log_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            log_filters &= Q(client__branch_id=branch_id)
+        client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
+        return ('% открываемости сообщений в ВК', qs.filter(id__in=client_ids))
 
 
 class AwayView(LoginRequiredMixin, View):
