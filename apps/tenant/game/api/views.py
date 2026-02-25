@@ -47,7 +47,7 @@ class GamePlayView(APIView):
             elif result['type'] == 'coin':
                 response_data['reward'] = result['reward']
             
-            elif result['type'] == 'code_required':
+            elif result['type'] == 'code':
                 response_data['message'] = 'Введите код дня'
 
             # Schedule post-game message (3 hours later with quiet hours)

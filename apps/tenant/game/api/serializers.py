@@ -10,7 +10,7 @@ class GamePlayRequestSerializer(serializers.Serializer):
     vk_user_id = serializers.IntegerField(required=True)
     branch_id = serializers.IntegerField(required=True)
     code = serializers.CharField(required=False, allow_blank=True) # Код дня
-    employee_id = serializers.IntegerField(required=False, allow_null=True) # ID официанта (vk_id)
+    employee_id = serializers.IntegerField(required=False, allow_null=True, allow_blank=True) # ID официанта (vk_id)
     delivery_code = serializers.CharField(required=False, allow_blank=True) # Код доставки
 
 class GameRewardSerializer(serializers.Serializer):
@@ -19,7 +19,7 @@ class GameRewardSerializer(serializers.Serializer):
     type: 'coin' | 'prize' | 'code_required'
     reward: число (монеты) или объект (Inventory)
     """
-    type = serializers.ChoiceField(choices=['coin', 'prize', 'code_required'])
+    type = serializers.ChoiceField(choices=['coin', 'prize', 'code'])
     reward = serializers.JSONField(required=False)
 
 class SuperPrizeSerializer(serializers.ModelSerializer):
