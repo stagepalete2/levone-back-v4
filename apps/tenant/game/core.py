@@ -79,10 +79,23 @@ class GameService:
                 logger.info(f"First visit for client {locked_client.id}: awarding super prize")
                 return GameService._give_super_prize(locked_client, cooldown)
 
-            # --- ПОСЕЩЕНИЯ 2, 3, 4 — фиксированные баллы; 5+ — 1000 ---
+            # --- ПОСЕЩЕНИЕ 2: 2000 баллов, код не нужен ---
+            if attempt_num == 2:
+                logger.info(f"Client {locked_client.id}: visit #2 → 2000 coins (no code required)")
+                return GameService._give_coin_reward(locked_client, cooldown, 2000, served_by_client)
+
+            # --- ПОСЕЩЕНИЯ 3 И ДАЛЕЕ: всегда требуется код дня ---
+            # Определяем сумму по номеру посещения: 3→700, 4→300, 5+→1000
             reward_amount = _RewardTable.VISIT_REWARDS.get(attempt_num, _RewardTable.DEFAULT_REWARD)
-            logger.info(f"Client {locked_client.id}: visit #{attempt_num} → {reward_amount} coins")
-            return GameService._give_coin_reward(locked_client, cooldown, reward_amount, served_by_client)
+
+            if not code:
+                logger.info(f"Client {locked_client.id}: visit #{attempt_num}, code required")
+                return {'type': 'code_required', 'reward': None}
+
+            logger.info(f"Client {locked_client.id}: visit #{attempt_num} → {reward_amount} coins (with code)")
+            return GameService._give_daily_code_reward(
+                locked_client, cooldown, code, branch_id, reward_amount, served_by_client
+            )
 
     # --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
 
@@ -112,6 +125,41 @@ class GameService:
         Начисляем баллы согласно таблице посещений:
           2-е → 2000, 3-е → 700, 4-е → 300, 5-е и далее → 1000.
         """
+        CoinTransaction.objects.create_transfer(
+            client_branch=client,
+            amount=amount,
+            transaction_type=CoinTransaction.Type.INCOME,
+            source=CoinTransaction.Source.GAME,
+            description=f'Победа в игре (+{amount})'
+        )
+
+        ClientAttempt.objects.create(client=client, served_by=served_by)
+        GameService._update_cooldown(cooldown)
+
+        return {'type': 'coin', 'reward': amount}
+
+    @staticmethod
+    def _give_daily_code_reward(
+        client: ClientBranch,
+        cooldown: Cooldown,
+        code: str,
+        branch_id: int,
+        amount: int,
+        served_by=None
+    ):
+        """
+        С 3-го посещения и далее — проверяем код дня, затем начисляем баллы.
+          3-е → 700, 4-е → 300, 5-е и далее → 1000.
+        """
+        today = timezone.localdate()
+        daily_code = DailyCode.objects.filter(branch_id=branch_id, date=today).first()
+
+        if not daily_code:
+            raise ValidationError(message='Код дня ещё не создан', code='code_not_set')
+
+        if daily_code.code != code.upper().strip():
+            raise ValidationError(message='Неверный код', code='invalid_code')
+
         CoinTransaction.objects.create_transfer(
             client_branch=client,
             amount=amount,
