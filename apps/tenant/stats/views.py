@@ -341,7 +341,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
         """Клиенты, получившие поздравление с ДР (MessageLog с birthday-типами)."""
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(campaign__message_type__in=['birthday_today', 'birthday_7days', 'birthday_1day'])
+        log_filters = Q(campaign__title__icontains="День Рождения")
         if date_from:
             log_filters &= Q(created_at__gte=date_from)
         if date_to:
