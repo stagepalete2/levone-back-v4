@@ -8,16 +8,23 @@ from apps.tenant.catalog.api.serializers import CatalogResponseSerializer
 from rest_framework import serializers
 
 class GamePlayRequestSerializer(serializers.Serializer):
-    """Валидация входящих параметров игры"""
     vk_user_id = serializers.IntegerField(required=True)
     branch_id = serializers.IntegerField(required=True)
-    code = serializers.CharField(required=False, allow_blank=True) # Код дня
-    
-    # ИСПРАВЛЕНИЕ: Убрали allow_blank=True
+    code = serializers.CharField(required=False, allow_blank=True)
     employee_id = serializers.IntegerField(required=False, allow_null=True) 
-    
-    delivery_code = serializers.CharField(required=False, allow_blank=True) # Код доставки
-    
+    delivery_code = serializers.CharField(required=False, allow_blank=True)
+
+    def to_internal_value(self, data):
+        # request.data обычно неизменяемый (QueryDict), поэтому делаем копию,
+        # если нам нужно изменить данные перед валидацией
+        if 'employee_id' in data and data['employee_id'] == '':
+            # В зависимости от версии DRF/Django data может быть QueryDict или обычным dict
+            if hasattr(data, 'copy'):
+                data = data.copy()
+            data['employee_id'] = None
+            
+        return super().to_internal_value(data)
+        
 class GameRewardSerializer(serializers.Serializer):
     """
     Универсальный ответ.
