@@ -282,14 +282,14 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         if date_to:
             filters &= Q(created_at__lte=date_to)
         if branch_id:
-            filters &= Q(branch_id=branch_id)
+            filters &= Q(client__branch_id=branch_id)
         birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
         return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
 
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
         """Клиенты из группы ВК, получившие первый подарок за игру."""
-        from apps.tenant.branch.models import ClientSuperPrize
+        from apps.tenant.inventory.models import SuperPrize
         prize_filters = Q(acquired_from='GAME')
         if date_from:
             prize_filters &= Q(created_at__gte=date_from)
@@ -297,7 +297,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             prize_filters &= Q(created_at__lte=date_to)
         if branch_id:
             prize_filters &= Q(client__branch_id=branch_id)
-        client_ids = ClientSuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
+        client_ids = SuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
         return (
             'Новые в группе и рассылке, получившие первый подарок',
             qs.filter(id__in=client_ids, is_joined_community=True)
