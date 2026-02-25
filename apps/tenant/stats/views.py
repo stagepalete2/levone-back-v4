@@ -107,10 +107,6 @@ class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView)
         context.update(period_ctx)
         context.update(branch_ctx)
 
-        # Получаем статистику за выбранный период и филиал.
-        # Передаём date_from/date_to явно, чтобы кастомный период не терялся:
-        # внутри get_dashboard_stats period_code='custom' не в PERIOD_CHOICES
-        # и без явных дат упал бы в fallback DEFAULT_PERIOD (30d).
         context["stats"] = GeneralStatsService.get_dashboard_stats(
             period_code=period_ctx['period_code'],
             branch_id=branch_ctx.get('selected_branch_id'),
@@ -118,7 +114,7 @@ class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView)
             date_to=period_ctx.get('date_to'),
         )
 
-        # Build period_params string for template links (fixes {% with %} scoping bug)
+        # Build period_params string for template links
         branch_id = branch_ctx.get('selected_branch_id')
         custom_from = period_ctx.get('custom_date_from')
         custom_to = period_ctx.get('custom_date_to')
@@ -150,16 +146,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
-        qs = ClientBranch.objects.all()
-        
-        # Фильтр по филиалу если выбран
-        if branch_ctx.get('selected_branch_id'):
-            qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
-        
-        if date_from:
-            period_qs = qs.filter(created_at__gte=date_from)
-        else:
-            period_qs = qs
 
         # Базовый QuerySet
         qs = ClientBranch.objects.all()
@@ -177,43 +163,26 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             period_qs = qs
 
         branch_id = branch_ctx.get('selected_branch_id')
-        if date_from and date_to:
-            period_qs = qs.filter(created_at__gte=date_from, created_at__lte=date_to)
-        elif date_from:
-            period_qs = qs.filter(created_at__gte=date_from)
-        else:
-            period_qs = qs
-
-        branch_id = branch_ctx.get('selected_branch_id')
 
         # --- КАРТА СТАТИСТИКИ ---
         title_map = {
             # 1. QR-сканирований за период
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
 
-            # 2. Общее количество гостей в рассылке (подписались через приложение)
+            # 2. Общее количество гостей в рассылке
             "mailing_subscribers": (
                 'Общее количество гостей в рассылке',
                 qs.filter(is_joined_community=True)
             ),
 
             # 3. Новые в группе и рассылке, получившие первый подарок
-            "new_clients_received_super_prize": (
-                'Новые в группе и рассылке, получившие первый подарок',
-                period_qs.filter(
-                    is_joined_community=True,
-                    superprizes__acquired_from='GAME'
-                )
-            ),
+            "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
 
             # 4. Вернулись и сыграли в игру повторно
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
 
             # 5. Купили подарки за баллы
-            "clients_bought_prizes": (
-                'Купили подарки за баллы',
-                self._get_bought_prizes_qs(qs, date_from, date_to)
-            ),
+            "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
 
             # 6. Подписались в сообщество ВК
             "group_subscribers": (
@@ -221,7 +190,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
                 qs.filter(is_joined_community=True)
             ),
 
-            # 7. Подписались на рассылку ВК (через наше приложение)
+            # 7. Подписались на рассылку ВК
             "mailing_period": (
                 'Подписались на рассылку ВК',
                 period_qs.filter(is_joined_community=True)
@@ -247,9 +216,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
                 'Перешли из историй ВК',
                 period_qs.filter(invited_by__isnull=False)
             ),
-
-            # 13. Гостей по POS-системе (внешние данные — нет прямого QS)
-            # 14. Индекс сканирования (внешние данные)
         }
 
         # Статистика из внешних POS-систем — список гостей недоступен
@@ -280,7 +246,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         ]
         return context
 
-    # ── Вспомогательные методы (вынесены, чтобы не считать всё подряд) ──
+    # ── Вспомогательные методы ──
 
     @staticmethod
     def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
@@ -315,13 +281,34 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
 
     @staticmethod
-    def _get_bought_prizes_qs(qs, date_from, date_to=None):
-        expense_filter = Q(transactions__type="EXPENSE")
+    def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
+        """Клиенты, вступившие в группу и получившие первый подарок за игру."""
+        from apps.tenant.branch.models import ClientSuperPrize
+        prize_filters = Q(acquired_from='GAME')
         if date_from:
-            expense_filter &= Q(transactions__created_at__gte=date_from)
+            prize_filters &= Q(created_at__gte=date_from)
         if date_to:
-            expense_filter &= Q(transactions__created_at__lte=date_to)
-        return qs.filter(expense_filter)
+            prize_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            prize_filters &= Q(client__branch_id=branch_id)
+        client_ids = ClientSuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
+        return (
+            'Новые в группе и рассылке, получившие первый подарок',
+            qs.filter(id__in=client_ids, is_joined_community=True)
+        )
+
+    @staticmethod
+    def _get_bought_prizes_clients(qs, date_from, date_to=None, branch_id=None):
+        """Клиенты, купившие подарки за баллы (через CoinTransaction)."""
+        tx_filters = Q(type='EXPENSE')
+        if date_from:
+            tx_filters &= Q(created_at__gte=date_from)
+        if date_to:
+            tx_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            tx_filters &= Q(client__branch_id=branch_id)
+        client_ids = CoinTransaction.objects.filter(tx_filters).values_list('client_id', flat=True)
+        return ('Купили подарки за баллы', qs.filter(id__in=client_ids))
 
     @staticmethod
     def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
@@ -339,7 +326,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, получившие поздравление с ДР (MessageLog с birthday-типами)."""
+        """Клиенты, получившие поздравление с ДР."""
         from apps.tenant.senler.models import MessageLog
         log_filters = Q(campaign__title__icontains="День Рождения")
         if date_from:
@@ -353,7 +340,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, прочитавшие хотя бы одно сообщение за период (открываемость)."""
+        """Клиенты, прочитавшие хотя бы одно сообщение за период."""
         from apps.tenant.senler.models import MessageLog
         log_filters = Q(is_read=True)
         if date_from:
@@ -424,7 +411,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
         elif period_ctx['period_code'] and period_ctx['period_code'] != 'custom':
             back_parts.append(f'period={period_ctx["period_code"]}')
 
-        # base_params for sentiment tabs (preserves period + branch)
         base_parts = list(back_parts)
         base_params = '&'.join(base_parts)
 
@@ -494,13 +480,8 @@ class RFAnalyticsDetailView(BaseAdminStatsView, DetailView):
         context = super().get_context_data(**kwargs)
         branch = self.object
 
-        # 1. Получаем данные матрицы через сервис
         matrix_data = RFAnalyticsService.get_matrix_data(branch)
-        
-        # 2. Получаем диапазоны для заголовков (F1, R1 и т.д.)
         ranges = RFAnalyticsService.get_segment_ranges(matrix_data['segments'])
-        
-        # 3. Настройки и примеры гостей
         settings_obj = RFSettings.objects.filter(branch=branch).first()
         
         top_guests = GuestRFScore.objects.filter(
@@ -536,27 +517,23 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
         context = super().get_context_data(**kwargs)
         branch = self.object
 
-        # 1. Валидация входных данных
         validator = MigrationFilterSerializer(data=self.request.GET)
         if not validator.is_valid():
             data = {'days': 30, 'segment': ''}
         else:
             data = validator.validated_data
 
-        # 2. Получение статистики через сервис
         stats = RFMigrationService.get_migration_stats(
             branch=branch, 
             days=data['days'], 
             segment_code=data.get('segment')
         )
 
-        # 3. Получение списка гостей для таблицы
         recent_guests = RFMigrationService.get_recent_migrated_guests(
             branch=branch, 
             days=data['days']
         )
 
-        # 4. Вспомогательные данные
         all_segments = RFSegment.objects.all().order_by('-code')
 
         context.update({
@@ -579,9 +556,6 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
 
 
 class RFRecalculateView(APIView):
-    """
-    Принудительный пересчёт RF для всех гостей текущего тенанта.
-    """
     def post(self, request, *args, **kwargs):
         serializer = RFRecalculateSerializer(data=request.data)
         if serializer.is_valid():
@@ -606,9 +580,6 @@ class RFRecalculateView(APIView):
 
 
 class RFSettingsSaveView(APIView):
-    """
-    Сохранение настроек и порогов RF-анализа.
-    """
     def post(self, request, *args, **kwargs):
         serializer = RFSettingsUpdateSerializer(data=request.data)
         
@@ -637,9 +608,6 @@ class RFSettingsSaveView(APIView):
 
 
 class RFGetSegmentGuest(APIView):
-    """
-    Получение списка гостей конкретного сегмента.
-    """
     def get(self, request, segment_code, *args, **kwargs):
         branch_id = request.query_params.get('branch')
         if not branch_id:
@@ -656,7 +624,6 @@ class RFGetSegmentGuest(APIView):
             
             guest_serializer = RFGuestListSerializer(result['guests_qs'], many=True)
             
-            # Calculate days since last campaign
             segment = result['segment']
             last_campaign_info = None
             if segment.last_campaign_date:
@@ -686,9 +653,6 @@ class RFGetSegmentGuest(APIView):
 
 
 class RFSegmentMailingView(APIView):
-    """
-    Отправка рассылки по сегменту RF-матрицы или по всем клиентам.
-    """
     def post(self, request, *args, **kwargs):
         branch_id = request.data.get('branch')
         segment_code = request.data.get('segment_code')
@@ -708,14 +672,12 @@ class RFSegmentMailingView(APIView):
                 return Response({"success": False, "error": "VK не настроен"}, status=400)
 
             if segment_code == 'all':
-                # Рассылка по всем клиентам филиала
                 clients = ClientBranch.objects.filter(
                     branch=branch,
                     is_allowed_message=True,
                     client__vk_user_id__isnull=False
                 ).select_related('client')
             else:
-                # Рассылка по сегменту
                 from apps.tenant.stats.models import GuestRFScore, RFSegment
                 segment = RFSegment.objects.get(code=segment_code)
                 scores = GuestRFScore.objects.filter(
@@ -724,7 +686,6 @@ class RFSegmentMailingView(APIView):
                 ).select_related('client__client')
                 clients = [s.client for s in scores if s.client.client and s.client.client.vk_user_id]
 
-                # Update last campaign date
                 segment.last_campaign_date = timezone.now()
                 segment.save(update_fields=['last_campaign_date'])
 
