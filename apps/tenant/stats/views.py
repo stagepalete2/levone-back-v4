@@ -326,7 +326,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         if date_to:
             visit_filters &= Q(created_at__lte=date_to)
         if branch_id:
-            visit_filters &= Q(branch_id=branch_id)
+            visit_filters &= Q(client__branch_id=branch_id)
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
         return ('Отсканировали QR-код за период', qs.filter(id__in=scan_ids))
 
