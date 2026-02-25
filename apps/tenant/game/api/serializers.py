@@ -5,14 +5,19 @@ from apps.tenant.game.models import Cooldown
 from apps.tenant.catalog.models import Product
 from apps.tenant.catalog.api.serializers import CatalogResponseSerializer
 
+from rest_framework import serializers
+
 class GamePlayRequestSerializer(serializers.Serializer):
     """Валидация входящих параметров игры"""
     vk_user_id = serializers.IntegerField(required=True)
     branch_id = serializers.IntegerField(required=True)
     code = serializers.CharField(required=False, allow_blank=True) # Код дня
-    employee_id = serializers.IntegerField(required=False, allow_null=True, allow_blank=True) # ID официанта (vk_id)
+    
+    # ИСПРАВЛЕНИЕ: Убрали allow_blank=True
+    employee_id = serializers.IntegerField(required=False, allow_null=True) 
+    
     delivery_code = serializers.CharField(required=False, allow_blank=True) # Код доставки
-
+    
 class GameRewardSerializer(serializers.Serializer):
     """
     Универсальный ответ.
