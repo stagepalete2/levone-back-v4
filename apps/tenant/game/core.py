@@ -82,7 +82,7 @@ class GameService:
                 return GameService._give_coin_reward(locked_client, cooldown, amount=reward)
 
             if not code:
-                return {'type': 'code_required', 'reward': None}
+                return {'type': 'code', 'reward': None}
 
             return GameService._give_daily_code_reward(
                 locked_client,
