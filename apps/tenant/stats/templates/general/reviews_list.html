@@ -247,11 +247,6 @@
                 <button class="btn-reply-toggle" onclick="toggleReply({{ review.id }})">
                     <i class="bi bi-reply"></i> Ответить
                 </button>
-                {% if review.vk_sender_id %}
-                    <a href="{% url 'away' review.vk_sender_id %}" target="_blank" class="btn-vk-profile">
-                        <i class="bi bi-box-arrow-up-right"></i> Профиль VK
-                    </a>
-                {% endif %}
             </div>
             <div style="font-size: 0.75rem; color: #bbb;">
                 {{ review.source }}
