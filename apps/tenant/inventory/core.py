@@ -371,6 +371,8 @@ class InventoryService:
                 if daily_code.code != code.upper().strip():
                     raise ValidationError(message='Неверный код', code='invalid_code')
 
+            else:
+                # --- Cooldown для обычных предметов ---
                 cooldown, created = Cooldown.objects.select_for_update().get_or_create(
                     client=client_profile,
                     defaults={'last_activated_at': None},
