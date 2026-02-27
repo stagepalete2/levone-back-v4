@@ -1,31 +1,6 @@
-"""
-Команда обнуления статистики и RFM для указанных филиалов.
-
-Что обнуляется (статистика):
-  - GuestRFScore          — текущие RF-оценки гостей
-  - RFMigrationLog        — история переходов между сегментами
-  - BranchSegmentSnapshot — снимки состава сегментов по датам
-  - RFSettings.stats_reset_date — устанавливается в NOW()
-
-Что НЕ трогается (данные гостей):
-  - CoinTransaction       — баланс монет остаётся
-  - Inventory / SuperPrize — призы и инвентарь остаются
-  - ClientAttempt         — попытки игры остаются, но RFM пересчитается от новой даты
-  - Quest / QuestProgress  — задания остаются
-
-После запуска команды:
-  - Следующий RFM-расчёт засчитает только события после stats_reset_date.
-  - Старые попытки (до reset_date) в RF игнорируются, но монеты за них не пропадают.
-
-Использование:
-  python manage.py reset_stats --branch 1
-  python manage.py reset_stats --branch 1 --branch 2
-  python manage.py reset_stats --all          # все филиалы текущего тенанта
-  python manage.py reset_stats --all --confirm
-"""
-
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django_tenants.utils import get_tenant_model, tenant_context
 
 
 class Command(BaseCommand):
@@ -43,7 +18,13 @@ class Command(BaseCommand):
             '--all',
             action='store_true',
             dest='all_branches',
-            help='Обнулить все филиалы текущего тенанта',
+            help='Обнулить все филиалы в обрабатываемом тенанте',
+        )
+        parser.add_argument(
+            '--all-tenants',
+            action='store_true',
+            dest='all_tenants',
+            help='Запустить обнуление по всем тенантам (кроме public)',
         )
         parser.add_argument(
             '--confirm',
@@ -53,6 +34,28 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        all_tenants = options.get('all_tenants', False)
+
+        if all_tenants:
+            TenantModel = get_tenant_model()
+            # Исключаем схему public, так как обычно там нет бизнес-данных
+            tenants = TenantModel.objects.exclude(schema_name='public')
+            
+            self.stdout.write(self.style.WARNING(f'Запуск по всем тенантам. Найдено схем: {tenants.count()}'))
+            
+            for tenant in tenants:
+                with tenant_context(tenant):
+                    self.stdout.write('\n' + '*' * 70)
+                    self.stdout.write(self.style.WARNING(f'>>> ТЕНАНТ: {tenant.schema_name} <<<'))
+                    self.stdout.write('*' * 70)
+                    self._process_tenant(options)
+        else:
+            # Обычный запуск в рамках текущего тенанта (по умолчанию)
+            self._process_tenant(options)
+
+    def _process_tenant(self, options):
+        # Импорты моделей делаем внутри метода, чтобы они корректно 
+        # подхватывали текущую схему из tenant_context
         from apps.tenant.branch.models import Branch
         from apps.tenant.stats.models import (
             GuestRFScore, RFMigrationLog, BranchSegmentSnapshot, RFSettings
@@ -63,7 +66,7 @@ class Command(BaseCommand):
         confirmed = options.get('confirmed', False)
 
         if not branch_ids and not all_branches:
-            self.stderr.write('Укажите --branch ID или --all')
+            self.stderr.write(self.style.ERROR('Укажите --branch ID или --all для этого тенанта'))
             return
 
         if all_branches:
@@ -72,7 +75,7 @@ class Command(BaseCommand):
             branches = Branch.objects.filter(id__in=branch_ids)
 
         if not branches.exists():
-            self.stderr.write('Филиалы не найдены')
+            self.stderr.write(self.style.NOTICE('Филиалы по заданным критериям в этом тенанте не найдены. Пропускаем.'))
             return
 
         self.stdout.write('\n' + '='*60)
@@ -99,7 +102,7 @@ class Command(BaseCommand):
 
         if not confirmed:
             self.stdout.write(
-                '\n⚠️  Это ПРЕВЬЮ. Для реального обнуления добавьте флаг --confirm\n'
+                self.style.WARNING('\n⚠️  Это ПРЕВЬЮ. Для реального обнуления добавьте флаг --confirm\n')
             )
             return
 
@@ -126,7 +129,7 @@ class Command(BaseCommand):
             ))
 
         self.stdout.write(self.style.SUCCESS(
-            f'\n✅ Обнуление завершено. Дата сброса: {reset_dt.strftime("%d.%m.%Y %H:%M")}\n'
+            f'\n✅ Обнуление в текущем тенанте завершено. Дата сброса: {reset_dt.strftime("%d.%m.%Y %H:%M")}\n'
             f'   Итого: RF={total_rf}, Logs={total_log}, Snapshots={total_snap}\n'
             f'\n   Следующий запуск calculate_rf_all пересчитает данные от {reset_dt.strftime("%d.%m.%Y")}.'
         ))
