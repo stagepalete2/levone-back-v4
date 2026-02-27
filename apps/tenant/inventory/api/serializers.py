@@ -22,10 +22,14 @@ class SuperPrizeClaimSerializer(serializers.Serializer):
 BirthdayPrizeClaimSerializer = SuperPrizeClaimSerializer
 
 class InventoryActivateSerializer(serializers.Serializer):
-    """Валидация активации предмета"""
+    """Валидация активации предмета.
+    code — обязателен только для BIRTHDAY_PRIZE, для остальных игнорируется.
+    """
     vk_user_id = serializers.IntegerField(required=True)
     branch_id = serializers.IntegerField(required=True)
     inventory_id = serializers.IntegerField(required=True)
+    code = serializers.CharField(required=False, allow_blank=True, default=None)
+
 
 # --- RESPONSE SERIALIZERS ---
 

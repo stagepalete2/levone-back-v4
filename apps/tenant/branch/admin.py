@@ -9,8 +9,9 @@ from apps.shared.config.mixins import BranchRestrictedAdminMixin
 from apps.tenant.branch.models import (
     Branch, BranchConfig, TelegramBot, BotAdmin,
     ClientBranch, CoinTransaction, StoryImage,
-    BranchTestimonials, Promotions, ClientBranchVisit
+    BranchTestimonials, Promotions, ClientBranchVisit, DailyCode
 )
+
 from apps.tenant.senler.services import VKService
 
 
@@ -60,6 +61,11 @@ def _get_vk_mini_app_id(company):
 
 
 # ─── Branch ────────────────────────────────────────────────────
+
+class BirthdayDailyCodeAdmin(admin.ModelAdmin):
+    list_display = ('code', 'date', 'branch', 'created_at')
+    list_filter = ('branch', 'date')
+    search_fields = ('code',)
 
 class BranchConfigInline(admin.StackedInline):
     model = BranchConfig
@@ -548,3 +554,4 @@ tenant_admin.register(StoryImage, StoryImageAdmin)
 tenant_admin.register(BranchTestimonials, BranchTestimonialsAdmin)
 tenant_admin.register(ClientBranchVisit, ClientBranchVisitAdmin)
 tenant_admin.register(Promotions, PromotionsAdmin)
+tenant_admin.register(DailyCode, BirthdayDailyCodeAdmin)

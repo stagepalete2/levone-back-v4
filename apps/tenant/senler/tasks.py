@@ -116,7 +116,7 @@ def check_tenant_birthdays(schema_name):
                     logger.warning(f"[{schema_name}] Шаблон birthday_1day не найден или неактивен.")
             
 
-            target_date_0 = today + datetime.timedelta(days=1)
+            target_date_0 = today  # ИСПРАВЛЕНО: сегодня, а не завтра
             clients_0 = ClientBranch.objects.filter(
                 birth_date__month=target_date_0.month,
                 birth_date__day=target_date_0.day,
@@ -133,6 +133,7 @@ def check_tenant_birthdays(schema_name):
                 else:
                     logger.warning(f"[{schema_name}] Шаблон birthday_today не найден или неактивен.")
 
+                    
         except Exception as e:
             logger.error(f"[{schema_name}] Ошибка при проверке ДР: {e}")
 

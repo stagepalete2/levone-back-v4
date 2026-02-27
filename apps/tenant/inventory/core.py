@@ -324,12 +324,14 @@ class InventoryService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def activate_inventory_item(vk_user_id: int, branch_id: int, inventory_id: int):
+    def activate_inventory_item(vk_user_id: int, branch_id: int, inventory_id: int, code: str = None):
         """
         Активация предмета (показать официанту).
-        Для BIRTHDAY_PRIZE — запускает таймер но НЕ требует cooldown.
+        Для BIRTHDAY_PRIZE — требует ввода code из DailyCode (branch.DailyCode).
         Для остальных — проверяет cooldown.
         """
+        from apps.tenant.branch.models import DailyCode as BranchDailyCode  # Локальный импорт
+
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
 
         with transaction.atomic():
@@ -346,8 +348,31 @@ class InventoryService:
 
             now_time = timezone.now()
 
-            # Для обычных предметов — проверяем cooldown
-            if inventory_item.acquired_from != 'BIRTHDAY_PRIZE':
+            if inventory_item.acquired_from == 'BIRTHDAY_PRIZE':
+                # --- Проверка кода дня для подарка ДР ---
+                if not code:
+                    raise ValidationError(
+                        message='Введите код дня для активации подарка дня рождения',
+                        code='code_required',
+                    )
+
+                today = timezone.localdate()
+                daily_code = BranchDailyCode.objects.filter(
+                    branch_id=branch_id,
+                    date=today,
+                ).first()
+
+                if not daily_code:
+                    raise ValidationError(
+                        message='Код дня ещё не создан. Обратитесь к персоналу.',
+                        code='code_not_set',
+                    )
+
+                if daily_code.code != code.upper().strip():
+                    raise ValidationError(message='Неверный код', code='invalid_code')
+
+            else:
+                # --- Cooldown для обычных предметов ---
                 cooldown, created = Cooldown.objects.select_for_update().get_or_create(
                     client=client_profile,
                     defaults={'last_activated_at': None},
@@ -362,6 +387,7 @@ class InventoryService:
             inventory_item.save(update_fields=['activated_at'])
 
             return inventory_item
+
 
 
 class CooldownService:

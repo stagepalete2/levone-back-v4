@@ -172,7 +172,11 @@ class InventoryActivateView(APIView):
         d = s.validated_data
         try:
             item = InventoryService.activate_inventory_item(
-                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'], inventory_id=d['inventory_id'])
+                vk_user_id=d['vk_user_id'],
+                branch_id=d['branch_id'],
+                inventory_id=d['inventory_id'],
+                code=d.get('code'),          # НОВОЕ: передаём code
+            )
             return Response(InventorySerializer(item, context={'request': request}).data)
         except ValidationError as e:
             sc = status.HTTP_404_NOT_FOUND if e.code == 'not_found' else status.HTTP_400_BAD_REQUEST

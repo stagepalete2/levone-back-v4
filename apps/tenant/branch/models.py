@@ -2,6 +2,7 @@ import uuid
 from django.db import models, transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
+from django.utils.timezone import now
 
 from apps.shared.config.models import TimeStampedModel
 
@@ -420,3 +421,32 @@ class Promotions(TimeStampedModel):
     class Meta:
         verbose_name = 'Скидка'
         verbose_name_plural = 'Скидки и промоакции'
+
+
+class DailyCode(TimeStampedModel):
+    """
+    Ежедневный код для активации подарка дня рождения (BIRTHDAY_PRIZE).
+    Логика генерации идентична DailyCode в Game и Quest.
+    """
+    date = models.DateField(verbose_name='Дата', default=now)
+    code = models.CharField(max_length=20, verbose_name='Код дня')
+
+    branch = models.ForeignKey(
+        'branch.Branch',
+        on_delete=models.CASCADE,
+        related_name='daily_codes_birthday',
+        verbose_name='Ресторан'
+    )
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.date}: {self.code} ({self.branch})"
+
+    class Meta:
+        verbose_name = 'Код дня (ДР подарок)'
+        verbose_name_plural = 'Коды дня (ДР подарки)'
+        ordering = ['-date']
+        unique_together = ('branch', 'date')

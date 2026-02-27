@@ -56,13 +56,13 @@ def process_tenant_daily_codes(tenant_id):
         from apps.tenant.branch.models import Branch
         from apps.tenant.game.models import DailyCode as GameDailyCodes
         from apps.tenant.quest.models import DailyCode as QuestDailyCodes
+        from apps.tenant.branch.models import DailyCode as BranchDailyCodes
         
         branches = Branch.objects.all()
         logger.info(f"Processing daily codes for tenant {tenant.schema_name}: {len(branches)} branches")
 
         for branch in branches:
             try:
-                # Используем транзакцию, чтобы Game и Quest создавались атомарно (вместе или никак)
                 with transaction.atomic():
                     # Game Code
                     GameDailyCodes.objects.get_or_create(
@@ -70,15 +70,22 @@ def process_tenant_daily_codes(tenant_id):
                         branch=branch,
                         defaults={"code": generate_code()},
                     )
-                    
+
                     # Quest Code
                     QuestDailyCodes.objects.get_or_create(
                         date=today,
                         branch=branch,
                         defaults={"code": generate_code()},
                     )
+
+                    # Birthday Prize Code (НОВОЕ)
+                    BranchDailyCodes.objects.get_or_create(
+                        date=today,
+                        branch=branch,
+                        defaults={"code": generate_code()},
+                    )
+
             except Exception as e:
-                # Ловим ошибку конкретного филиала, чтобы не прерывать цикл для остальных
                 logger.error(f"Error generating codes for branch {branch.id} in tenant {tenant.schema_name}: {e}")
 
 @shared_task()
