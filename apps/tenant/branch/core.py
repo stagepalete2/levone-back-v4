@@ -101,10 +101,6 @@ class ClientService:
 		if data.get('birth_date'):
 			client_branch.birth_date = data['birth_date']
 			client_branch.save(update_fields=['birth_date'])
-			
-		# Проверяем подарок на ДР (при регистрации)
-		from apps.tenant.inventory.core import InventoryService
-		InventoryService.grant_birthday_prize_single(client_branch)
 		
 		return client_branch
 
@@ -124,10 +120,6 @@ class ClientService:
 			setattr(client_branch, attr, value)
 		
 		client_branch.save()
-		
-		# Проверяем подарок на ДР (при обновлении профиля, например, даты рождения)
-		from apps.tenant.inventory.core import InventoryService
-		InventoryService.grant_birthday_prize_single(client_branch)
 		
 		return client_branch
 
