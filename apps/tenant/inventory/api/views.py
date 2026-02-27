@@ -175,7 +175,7 @@ class InventoryActivateView(APIView):
                 vk_user_id=d['vk_user_id'],
                 branch_id=d['branch_id'],
                 inventory_id=d['inventory_id'],
-                code=d.get('code'),          # НОВОЕ: передаём code
+                code=d.get('code'),
             )
             return Response(InventorySerializer(item, context={'request': request}).data)
         except ValidationError as e:

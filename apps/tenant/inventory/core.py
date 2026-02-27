@@ -209,7 +209,7 @@ class InventoryService:
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
 
         with transaction.atomic():
-            product = Product.objects.filter(id=product_id, is_super_prize=True, is_active=True).first()
+            product = Product.objects.filter(id=product_id, is_super_prize=True).first()
             if not product:
                 raise ValidationError(message='Приз не найден или не доступен', code='product_not_found')
 
