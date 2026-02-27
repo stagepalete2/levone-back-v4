@@ -225,13 +225,18 @@ class GeneralStatsService:
         total_read = MessageLog.objects.filter(msg_filters, is_read=True).count()
         open_rate = int((total_read / total_sent * 100)) if total_sent > 0 else 0
 
-        # ── VK подписчики (не зависят от периода) ──
-        group_subscribers = 0
+        # ── VK подписчики ──
+        # group_subscribers — количество клиентов, вступивших в сообщество (is_joined_community=True)
+        # mailing_subscribers — из VK Senler API (не зависит от периода)
+        community_qs = ClientBranch.objects.filter(is_joined_community=True)
+        if branch_id:
+            community_qs = community_qs.filter(branch_id=branch_id)
+        group_subscribers = community_qs.count()
+
         mailing_subscribers = 0
         try:
             from apps.tenant.senler.services import VKService
             vk_service = VKService()
-            group_subscribers = vk_service.get_group_members_count()
             mailing_subscribers = vk_service.get_mailing_subscribers_count()
         except Exception as e:
             logger.warning("VK service error: %s", e)
