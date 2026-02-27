@@ -114,6 +114,24 @@ def check_tenant_birthdays(schema_name):
                     logger.info(f"[{schema_name}] Отправлено {clients_1.count()} сообщений (1 день до ДР).")
                 else:
                     logger.warning(f"[{schema_name}] Шаблон birthday_1day не найден или неактивен.")
+            
+
+            target_date_0 = today + datetime.timedelta(days=1)
+            clients_0 = ClientBranch.objects.filter(
+                birth_date__month=target_date_0.month,
+                birth_date__day=target_date_0.day,
+                client__vk_user_id__isnull=False,
+            )
+            if clients_0.exists():
+                msg_text = MessageTemplate.get_text(
+                    'birthday_today',
+                    defaults.get('birthday_today', '')
+                )
+                if msg_text:
+                    vk_service.send_batch_messages(list(clients_0), msg_text, campaign=campaign)
+                    logger.info(f"[{schema_name}] Отправлено {clients_0.count()} сообщений (в день ДР).")
+                else:
+                    logger.warning(f"[{schema_name}] Шаблон birthday_today не найден или неактивен.")
 
         except Exception as e:
             logger.error(f"[{schema_name}] Ошибка при проверке ДР: {e}")
