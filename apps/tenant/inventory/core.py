@@ -260,13 +260,17 @@ class InventoryService:
         year_start = datetime.date(today.year, 1, 1)
         year_end   = datetime.date(today.year, 12, 31)
 
-        prizes = SuperPrize.objects.filter(
-            client=client_profile,
-            acquired_from='BIRTHDAY',
-            activated_at__isnull=True,
-            created_at__date__gte=year_start,
-            created_at__date__lte=year_end,
-        ).order_by('created_at')
+        # prizes = SuperPrize.objects.filter(
+        #     client=client_profile,
+        #     acquired_from='BIRTHDAY',
+        #     activated_at__isnull=True,
+        #     created_at__date__gte=year_start,
+        #     created_at__date__lte=year_end,
+        # ).order_by('created_at')
+
+        prizes = Product.objects.filter(
+            is_birthday_prize=True
+        )
 
         return prizes
 
