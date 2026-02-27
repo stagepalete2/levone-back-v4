@@ -127,16 +127,29 @@ class GeneralStatsService:
         :param branch_id: ID филиала для фильтрации (опционально)
         :param date_from: явная дата начала (для кастомного периода из UI)
         :param date_to: явная дата конца (для кастомного периода из UI)
+        
+        Если для выбранного филиала задана stats_reset_date — дата начала периода
+        не может быть раньше даты обнуления.
         """
-        # Если date_from/date_to переданы явно (кастомный период из UI) —
-        # не пересчитываем их через resolve_period, иначе они будут проигнорированы
-        # и заменены на DEFAULT_PERIOD (30d).
         if date_from is not None and date_to is not None:
             period_code = period_code or 'custom'
         else:
             date_from, date_to, period_code = cls.resolve_period(
                 period_code or cls.DEFAULT_PERIOD
             )
+
+        # Уважаем stats_reset_date: сдвигаем date_from если нужно
+        if branch_id:
+            try:
+                from apps.tenant.stats.models import RFSettings
+                rf_settings = RFSettings.objects.filter(branch_id=branch_id).first()
+                if rf_settings and rf_settings.stats_reset_date:
+                    reset_dt = rf_settings.stats_reset_date
+                    if date_from is None or date_from < reset_dt:
+                        date_from = reset_dt
+            except Exception:
+                pass
+
 
         base_qs = ClientBranch.objects.all()
         
@@ -498,6 +511,10 @@ class RFCalculator:
         
         period_start = today_dt - timezone.timedelta(days=self.settings.analysis_period)
 
+        # Если задана дата обнуления — используем более позднюю из двух дат
+        if self.settings.stats_reset_date:
+            period_start = max(period_start, self.settings.stats_reset_date)
+        
         guests = ClientBranch.objects.filter(branch=self.branch).annotate(
             last_attempt=Max('game_attempts__created_at'),
             attempt_count=Count('game_attempts', filter=Q(game_attempts__created_at__gte=period_start))

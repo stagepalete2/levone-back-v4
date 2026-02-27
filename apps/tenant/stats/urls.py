@@ -7,7 +7,7 @@ from apps.tenant.stats.views import (
     ReviewsListView, ReviewReplyView,
     RFAnalyticsView, RFAnalyticsDetailView,
     RFGuestMigrationAnalyticsDetailView, RFRecalculateView, RFSettingsSaveView, RFGetSegmentGuest,
-    RFSegmentMailingView
+    RFSegmentMailingView, RFStatsResetView,
 )
 
 urlpatterns = [
@@ -19,7 +19,6 @@ urlpatterns = [
     path("reviews/", ReviewsListView.as_view(), name="admin-reviews-list"),
     path("reviews/reply/", ReviewReplyView.as_view(), name="admin-review-reply"),
 
-
     path('rf/', RFAnalyticsView.as_view(), name='rf-statistics'),
     path('rf/<int:id>/', RFAnalyticsDetailView.as_view(), name='rf-detail-statistics'),
 	path('rf/<int:id>/migration/', RFGuestMigrationAnalyticsDetailView.as_view(), name='rf-migration-statistics'),
@@ -28,4 +27,6 @@ urlpatterns = [
     path('api/v1/rf/save-settings/', RFSettingsSaveView.as_view(), name='rf-settings-save'),
     path('api/v1/rf/segment-guest/<str:segment_code>/', RFGetSegmentGuest.as_view(), name='rf-segment-guests'),
     path('api/v1/rf/segment-mailing/', RFSegmentMailingView.as_view(), name='rf-segment-mailing'),
+    # Обнуление статистики (не трогает балансы)
+    path('api/v1/rf/reset-stats/', RFStatsResetView.as_view(), name='rf-stats-reset'),
 ]

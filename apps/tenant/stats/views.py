@@ -736,3 +736,80 @@ class RFSegmentMailingView(APIView):
             return Response({"success": False, "error": "Филиал не найден"}, status=404)
         except Exception as e:
             return Response({"success": False, "error": str(e)}, status=500)
+
+class RFStatsResetView(APIView):
+    """
+    POST /analytics/api/v1/rf/reset-stats/
+
+    Обнуляет статистику и RFM данные для указанных филиалов.
+    Балансы монет, инвентарь, задания и попытки НЕ затрагиваются.
+
+    Body:
+        { "branch": 1 }           — один филиал
+        { "branch_ids": [1, 2] }  — несколько филиалов
+        { "all": true }           — все филиалы тенанта
+
+    После обнуления:
+        - RFM пересчитается от текущего момента при следующем запуске задачи
+        - Дашборд будет показывать данные только после даты сброса
+        - Старые данные не удаляются из CoinTransaction / Inventory
+    """
+
+    def post(self, request, *args, **kwargs):
+        from apps.tenant.branch.models import Branch
+        from apps.tenant.stats.models import (
+            GuestRFScore, RFMigrationLog, BranchSegmentSnapshot, RFSettings,
+        )
+
+        branch_id  = request.data.get('branch')
+        branch_ids = request.data.get('branch_ids', [])
+        all_flag   = request.data.get('all', False)
+
+        if branch_id:
+            branch_ids = [branch_id]
+
+        if not branch_ids and not all_flag:
+            return Response(
+                {'error': 'Укажите branch, branch_ids или all=true'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if all_flag:
+            branches = Branch.objects.all()
+        else:
+            branches = Branch.objects.filter(id__in=branch_ids)
+
+        if not branches.exists():
+            return Response({'error': 'Филиалы не найдены'}, status=status.HTTP_404_NOT_FOUND)
+
+        reset_dt = timezone.now()
+        results = []
+
+        for branch in branches:
+            rf_del, _   = GuestRFScore.objects.filter(client__branch=branch).delete()
+            log_del, _  = RFMigrationLog.objects.filter(client__branch=branch).delete()
+            snap_del, _ = BranchSegmentSnapshot.objects.filter(branch=branch).delete()
+
+            settings, _ = RFSettings.objects.get_or_create(branch=branch)
+            settings.stats_reset_date = reset_dt
+            settings.save(update_fields=['stats_reset_date'])
+
+            results.append({
+                'branch_id':   branch.id,
+                'branch_name': branch.name,
+                'deleted': {
+                    'rf_scores':   rf_del,
+                    'rf_logs':     log_del,
+                    'snapshots':   snap_del,
+                },
+            })
+
+        return Response({
+            'success': True,
+            'message': (
+                f'Статистика обнулена. Дата сброса: {reset_dt.strftime("%d.%m.%Y %H:%M")}. '
+                'Балансы, задания и призы не затронуты.'
+            ),
+            'reset_date': reset_dt.isoformat(),
+            'branches':   results,
+        }, status=status.HTTP_200_OK)

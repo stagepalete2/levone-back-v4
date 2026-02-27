@@ -38,6 +38,11 @@ class Product(TimeStampedModel):
 
     is_active = models.BooleanField(default=True, verbose_name='Опубликовано') 
     is_super_prize = models.BooleanField(default=False, verbose_name='Супер-приз')
+    is_birthday_prize = models.BooleanField(
+        default=False,
+        verbose_name='Приз дня рождения',
+        help_text='Если включено — этот товар будет доступен как приз дня рождения (аналог супер-приза, но только для именинников)'
+    )
 
     branch = models.ForeignKey(
         'branch.Branch', 

@@ -6,10 +6,10 @@ from apps.tenant.catalog.models import Product, Cooldown
 
 
 class ProductAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
-    list_display = ('name', 'branch', 'price', 'is_active', 'is_super_prize', 'created_at')
-    list_filter = ('branch', 'is_active', 'is_super_prize')
+    list_display = ('name', 'branch', 'price', 'is_active', 'is_super_prize', 'is_birthday_prize', 'created_at')
+    list_filter = ('branch', 'is_active', 'is_super_prize', 'is_birthday_prize')
     search_fields = ('name', 'description')
-    list_editable = ('is_active', 'is_super_prize', 'price')
+    list_editable = ('is_active', 'is_super_prize', 'is_birthday_prize', 'price')
 
 
 class CooldownAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):

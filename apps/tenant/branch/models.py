@@ -56,6 +56,41 @@ class Branch(TimeStampedModel):
             raise ValidationError(
                 'Необходимо указать хотя бы один идентификатор: IIKO Organization ID или Dooglys Branch ID'
             )
+
+        # Защита от дублирования dooglys_branch_id МЕЖДУ тенантами
+        if has_dooglys:
+            self._validate_dooglys_id_unique_across_tenants()
+
+    def _validate_dooglys_id_unique_across_tenants(self):
+        """
+        Проверяет, что dooglys_branch_id не используется ни в одном другом тенанте.
+        Это предотвращает ситуацию, когда два разных тенанта используют один ID ресторана Dooglys,
+        что сломало бы единый вебхук доставки.
+        """
+        from django_tenants.utils import schema_context, get_tenant_model
+        from django.db import connection
+
+        current_schema = connection.schema_name
+        TenantModel = get_tenant_model()
+
+        for tenant in TenantModel.objects.exclude(schema_name='public').exclude(schema_name=current_schema):
+            try:
+                with schema_context(tenant.schema_name):
+                    # Проверяем есть ли такой ID (исключая себя при редактировании)
+                    qs = Branch.objects.filter(dooglys_branch_id=self.dooglys_branch_id)
+                    if self.pk:
+                        qs = qs.exclude(pk=self.pk)
+                    if qs.exists():
+                        raise ValidationError({
+                            'dooglys_branch_id': (
+                                f'Dooglys Branch ID {self.dooglys_branch_id} уже используется '
+                                f'в другом тенанте. Каждый ID должен быть уникальным в системе.'
+                            )
+                        })
+            except ValidationError:
+                raise
+            except Exception:
+                pass  # Если схема недоступна, пропускаем
     
     def save(self, *args, **kwargs):
         self.clean()

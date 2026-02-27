@@ -4,166 +4,176 @@ from rest_framework import status
 from django.core.exceptions import ValidationError
 
 from apps.tenant.inventory.api.serializers import (
-    InventoryRequestSerializer, 
-    InventorySerializer, 
+    InventoryRequestSerializer,
+    InventorySerializer,
     SuperPrizeSerializer,
     SuperPrizeClaimSerializer,
+    BirthdayPrizeSerializer,
+    BirthdayPrizeClaimSerializer,
+    BirthdayStatusSerializer,
     InventoryCooldownSerializer,
-    InventoryActivateSerializer
+    InventoryActivateSerializer,
 )
 from apps.tenant.inventory.core import InventoryService, CooldownService
 
+
 class InventoryView(APIView):
     """
-    Получить список активных подарков.
-    GET /api/.../inventory/?vk_user_id=1&branch=1
+    GET /api/v1/inventory/?vk_user_id=1&branch_id=1
     """
     def get(self, request, format=None):
-        request_serializer = InventoryRequestSerializer(data=request.query_params)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        data = request_serializer.validated_data
-
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
             inventory = InventoryService.get_client_inventory(
-                vk_user_id=data['vk_user_id'],
-                branch_id=data['branch_id']
-            )
-            
-            response_serializer = InventorySerializer(
-                inventory, 
-                many=True,
-                context={'request': request}
-            )
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
-
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
+            return Response(InventorySerializer(inventory, many=True,
+                context={'request': request}).data)
         except ValidationError as e:
             return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
 
 
 class SuperPrizeInventoryView(APIView):
-    """
-    GET: Получить доступные супер-призы (еще не выбранные).
-    POST: Выбрать (активировать) супер-приз -> превращает его в Inventory Item.
-    """
+    """Обычные супер-призы (GAME/MANUAL)."""
     def get(self, request, format=None):
-        request_serializer = InventoryRequestSerializer(data=request.query_params)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        data = request_serializer.validated_data
-
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
             prizes = InventoryService.get_client_super_prizes(
-                vk_user_id=data['vk_user_id'],
-                branch_id=data['branch_id']
-            )
-            serializer = SuperPrizeSerializer(prizes, many=True, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
+            return Response(SuperPrizeSerializer(prizes, many=True,
+                context={'request': request}).data)
         except ValidationError as e:
             return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, format=None):
-        """Выбор приза"""
-        # Поддержка старого формата (если параметры в query) и нового (в body)
-        # Но лучше следовать body.
-        data = request.data.copy()
-        
-        request_serializer = SuperPrizeClaimSerializer(data=data)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        valid_data = request_serializer.validated_data
-
+        s = SuperPrizeClaimSerializer(data=request.data)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
-            inventory_item = InventoryService.claim_super_prize(
-                vk_user_id=valid_data['vk_user_id'],
-                branch_id=valid_data['branch_id'],
-                product_id=valid_data['product_id']
-            )
-            
-            serializer = InventorySerializer(inventory_item, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
+            item = InventoryService.claim_super_prize(
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'], product_id=d['product_id'])
+            return Response(InventorySerializer(item, context={'request': request}).data)
         except ValidationError as e:
-            # Возвращаем 404 если не найдено, 400 в остальных случаях
-            status_code = status.HTTP_404_NOT_FOUND if e.code in ['not_found', 'product_not_found'] else status.HTTP_400_BAD_REQUEST
-            return Response({'code': e.code, 'message': e.message}, status=status_code)
+            sc = status.HTTP_404_NOT_FOUND if e.code in ['not_found', 'product_not_found'] else status.HTTP_400_BAD_REQUEST
+            return Response({'code': e.code, 'message': e.message}, status=sc)
+        except Exception as e:
+            return Response({'code': 'server_error', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BirthdayStatusView(APIView):
+    """
+    GET /api/v1/birthday/status/?vk_user_id=1&branch_id=1
+
+    Возвращает is_birthday_mode и has_pending_prize.
+    Фронт использует это для:
+    - Кнопки «Посмотреть подарок» в рассылке
+    - Блокировки всего кроме раздела подарков ДР
+    """
+    def get(self, request, format=None):
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
+        try:
+            result = InventoryService.get_birthday_status(
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
+            return Response(BirthdayStatusSerializer(result).data)
+        except ValidationError as e:
+            return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BirthdayPrizeView(APIView):
+    """
+    GET  /api/v1/birthday/prize/?vk_user_id=1&branch_id=1
+         Просмотр доступных призов ДР. Активировать нельзя — только в кафе по коду.
+
+    POST /api/v1/birthday/prize/
+         Body: { vk_user_id, branch_id, product_id }
+         Резервирует конкретный приз ДР → создаёт Inventory с activated_at=None.
+         Активация произойдёт только через InventoryActivateView в кафе.
+    """
+    def get(self, request, format=None):
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
+        try:
+            prizes = InventoryService.get_client_birthday_prizes(
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
+            return Response(BirthdayPrizeSerializer(prizes, many=True,
+                context={'request': request}).data)
+        except ValidationError as e:
+            sc = status.HTTP_403_FORBIDDEN if e.code == 'not_birthday_window' else status.HTTP_404_NOT_FOUND
+            return Response({'code': e.code, 'message': e.message}, status=sc)
+
+    def post(self, request, format=None):
+        s = BirthdayPrizeClaimSerializer(data=request.data)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
+        try:
+            item = InventoryService.claim_birthday_prize(
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'], product_id=d['product_id'])
+            return Response(InventorySerializer(item, context={'request': request}).data)
+        except ValidationError as e:
+            if e.code == 'not_birthday_window':
+                return Response({'code': e.code, 'message': e.message}, status=status.HTTP_403_FORBIDDEN)
+            sc = status.HTTP_404_NOT_FOUND if e.code in ['not_found', 'product_not_found'] else status.HTTP_400_BAD_REQUEST
+            return Response({'code': e.code, 'message': e.message}, status=sc)
         except Exception as e:
             return Response({'code': 'server_error', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class InventoryCooldownView(APIView):
-    """
-    Статус перезарядки инвентаря.
-    """
+    """Статус перезарядки."""
     def get(self, request, format=None):
-        request_serializer = InventoryRequestSerializer(data=request.query_params)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        data = request_serializer.validated_data
-
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
             cooldown = CooldownService.get_cooldown_status(
-                vk_user_id=data['vk_user_id'],
-                branch_id=data['branch_id']
-            )
-            
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
             if not cooldown:
-                return Response({}, status=status.HTTP_200_OK)
-            
-            serializer = InventoryCooldownSerializer(cooldown)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+                return Response({})
+            return Response(InventoryCooldownSerializer(cooldown).data)
         except ValidationError as e:
             return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, format=None):
-        """Ручная установка кулдауна"""
-        request_serializer = InventoryRequestSerializer(data=request.query_params)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        data = request_serializer.validated_data
-
+        s = InventoryRequestSerializer(data=request.query_params)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
             cooldown = CooldownService.activate_cooldown_manually(
-                vk_user_id=data['vk_user_id'],
-                branch_id=data['branch_id']
-            )
-            serializer = InventoryCooldownSerializer(cooldown)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
+            return Response(InventoryCooldownSerializer(cooldown).data)
         except ValidationError as e:
             return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
 
 
 class InventoryActivateView(APIView):
     """
-    Активация предмета (использование).
+    POST /api/v1/inventory/activate/
+    Активация предмета (показать официанту).
+    Для BIRTHDAY_PRIZE — без cooldown, только в кафе.
     """
     def post(self, request, format=None):
-        request_serializer = InventoryActivateSerializer(data=request.data)
-        if not request_serializer.is_valid():
-            return Response(request_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        data = request_serializer.validated_data
-
+        s = InventoryActivateSerializer(data=request.data)
+        if not s.is_valid():
+            return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+        d = s.validated_data
         try:
-            inventory_item = InventoryService.activate_inventory_item(
-                vk_user_id=data['vk_user_id'],
-                branch_id=data['branch_id'],
-                inventory_id=data['inventory_id']
-            )
-            
-            serializer = InventorySerializer(inventory_item, context={'request': request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
-            
+            item = InventoryService.activate_inventory_item(
+                vk_user_id=d['vk_user_id'], branch_id=d['branch_id'], inventory_id=d['inventory_id'])
+            return Response(InventorySerializer(item, context={'request': request}).data)
         except ValidationError as e:
-            status_code = status.HTTP_400_BAD_REQUEST
-            if e.code == 'not_found':
-                status_code = status.HTTP_404_NOT_FOUND
-                
-            return Response({'code': e.code, 'message': e.message}, status=status_code)
+            sc = status.HTTP_404_NOT_FOUND if e.code == 'not_found' else status.HTTP_400_BAD_REQUEST
+            return Response({'code': e.code, 'message': e.message}, status=sc)

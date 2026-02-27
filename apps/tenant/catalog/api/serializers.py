@@ -25,7 +25,8 @@ class CatalogResponseSerializer(serializers.ModelSerializer):
             'description', 
             'image', 
             'price', 
-            'is_super_prize'
+            'is_super_prize',
+            'is_birthday_prize',
         ]
 
     def get_image(self, instance):

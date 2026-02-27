@@ -87,9 +87,20 @@ class RFMigrationLog(models.Model):
         verbose_name_plural = 'RF Логи-миграции'
 
 class RFSettings(models.Model):
-    """Оставляем только период анализа, пороги ушли в RFSegment [cite: 64]"""
+    """Оставляем только период анализа, пороги ушли в RFSegment"""
     branch = models.OneToOneField('branch.Branch', on_delete=models.CASCADE, verbose_name='Ресторан')
     analysis_period = models.IntegerField(default=365, verbose_name='Период анализа')
+
+    stats_reset_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Дата обнуления статистики',
+        help_text=(
+            'Если задана — RFM-анализ и общая статистика учитывают '
+            'ТОЛЬКО данные после этой даты. '
+            'Балансы монет, задания и инвентарь НЕ затрагиваются.'
+        ),
+    )
 
     def __str__(self):
         return str(self.branch)

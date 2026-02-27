@@ -8,6 +8,7 @@ class Inventory(TimeStampedModel):
     SOURCE_CHOICES = [
         ('BUY', 'Покупка'),
         ('SUPERPRIZE', 'Супер приз'),
+        ('BIRTHDAY_PRIZE', 'Приз дня рождения'),
     ]
 
     client = models.ForeignKey(
