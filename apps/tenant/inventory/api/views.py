@@ -69,11 +69,7 @@ class SuperPrizeInventoryView(APIView):
 class BirthdayStatusView(APIView):
     """
     GET /api/v1/birthday/status/?vk_user_id=1&branch_id=1
-
-    Возвращает is_birthday_mode и has_pending_prize.
-    Фронт использует это для:
-    - Кнопки «Посмотреть подарок» в рассылке
-    - Блокировки всего кроме раздела подарков ДР
+    Возвращает is_birthday_mode — попадает ли гость в окно ±5 дней от ДР.
     """
     def get(self, request, format=None):
         s = InventoryRequestSerializer(data=request.query_params)
@@ -91,12 +87,12 @@ class BirthdayStatusView(APIView):
 class BirthdayPrizeView(APIView):
     """
     GET  /api/v1/birthday/prize/?vk_user_id=1&branch_id=1
-         Возвращает список доступных подарков ДР (catalog.Product).
-         Только если гость в окне ±5 дней ДР и есть неиспользованный SuperPrize(BIRTHDAY).
+         Возвращает список catalog.Product (is_birthday_prize=True).
+         Только если гость в окне ±5 дней ДР.
 
     POST /api/v1/birthday/prize/
          Body: { vk_user_id, branch_id, product_id }
-         Резервирует выбранный приз ДР → создаёт Inventory с activated_at=None.
+         Создаёт Inventory(acquired_from='BIRTHDAY_PRIZE', activated_at=None).
          Активация только через InventoryActivateView в кафе.
     """
     def get(self, request, format=None):

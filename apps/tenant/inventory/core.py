@@ -164,25 +164,11 @@ class InventoryService:
     @staticmethod
     def get_birthday_status(vk_user_id: int, branch_id: int) -> dict:
         """
-        Возвращает {'is_birthday_mode': bool, 'has_pending_prize': bool}
+        Возвращает {'is_birthday_mode': bool}
         """
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
         in_window, _ = _is_in_birthday_window(client_profile.birth_date)
-
-        has_pending = False
-        if in_window:
-            today = timezone.now().date()
-            year_start = datetime.date(today.year, 1, 1)
-            year_end   = datetime.date(today.year, 12, 31)
-            has_pending = SuperPrize.objects.filter(
-                client=client_profile,
-                acquired_from='BIRTHDAY',
-                activated_at__isnull=True,
-                created_at__date__gte=year_start,
-                created_at__date__lte=year_end,
-            ).exists()
-
-        return {'is_birthday_mode': in_window, 'has_pending_prize': has_pending}
+        return {'is_birthday_mode': in_window}
 
     # ------------------------------------------------------------------
     # SUPER PRIZE (обычный, из игры)
@@ -238,14 +224,14 @@ class InventoryService:
             return inventory_item
 
     # ------------------------------------------------------------------
-    # BIRTHDAY PRIZE — выбор подарка (только просмотр / активация через кафе)
+    # BIRTHDAY PRIZE — просмотр и выбор подарка
     # ------------------------------------------------------------------
 
     @staticmethod
     def get_client_birthday_prizes(vk_user_id: int, branch_id: int):
         """
         Возвращает список доступных подарков ДР (catalog.Product, is_birthday_prize=True).
-        Только если гость находится в окне ДР и есть неиспользованный SuperPrize(BIRTHDAY).
+        Только если гость находится в окне ±5 дней ДР.
         """
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
 
@@ -256,39 +242,17 @@ class InventoryService:
                 code='not_birthday_window',
             )
 
-        today = timezone.now().date()
-        year_start = datetime.date(today.year, 1, 1)
-        year_end   = datetime.date(today.year, 12, 31)
-
-        has_pending = SuperPrize.objects.filter(
-            client=client_profile,
-            acquired_from='BIRTHDAY',
-            activated_at__isnull=True,
-            created_at__date__gte=year_start,
-            created_at__date__lte=year_end,
-        ).exists()
-
-        if not has_pending:
-            raise ValidationError(
-                message='Нет доступного приза дня рождения',
-                code='not_found',
-            )
-
-        products = Product.objects.filter(
+        return Product.objects.filter(
             branch=client_profile.branch,
             is_birthday_prize=True,
             is_active=True,
         ).order_by('-created_at')
 
-        return products
-
     @staticmethod
     def claim_birthday_prize(vk_user_id: int, branch_id: int, product_id: int):
         """
-        Клиент выбирает конкретный приз ДР (is_birthday_prize=True).
-        Активировать (показать официанту) можно только через InventoryActivateView,
-        которая требует физического посещения кафе (код дня). 
-        Этот метод только «зарезервировывает» подарок — помещает в Inventory с activated_at=None.
+        Клиент выбирает конкретный приз ДР — сразу создаётся Inventory(acquired_from='BIRTHDAY_PRIZE').
+        Активация (показать официанту) только через InventoryActivateView в кафе.
         """
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
 
@@ -299,51 +263,25 @@ class InventoryService:
                 code='not_birthday_window',
             )
 
-        with transaction.atomic():
-            product = Product.objects.filter(
-                id=product_id,
-                is_birthday_prize=True,
-                is_active=True,
-                branch=client_profile.branch,
-            ).first()
-            if not product:
-                raise ValidationError(
-                    message='Приз дня рождения не найден',
-                    code='product_not_found',
-                )
-
-            today = timezone.now().date()
-            year_start = datetime.date(today.year, 1, 1)
-            year_end   = datetime.date(today.year, 12, 31)
-
-            birthday_sp = SuperPrize.objects.select_for_update().filter(
-                client=client_profile,
-                acquired_from='BIRTHDAY',
-                activated_at__isnull=True,
-                created_at__date__gte=year_start,
-                created_at__date__lte=year_end,
-            ).order_by('created_at').first()
-
-            if not birthday_sp:
-                raise ValidationError(
-                    message='Нет доступного приза дня рождения',
-                    code='not_found',
-                )
-
-            # Фиксируем выбор в SuperPrize
-            birthday_sp.product = product
-            birthday_sp.activated_at = timezone.now()
-            birthday_sp.save()
-
-            # Создаём предмет инвентаря БЕЗ активации (activated_at=None)
-            # Активация произойдёт только в кафе через InventoryActivateView
-            inventory_item = Inventory.objects.create(
-                client=client_profile,
-                product=product,
-                acquired_from='BIRTHDAY_PRIZE',
+        product = Product.objects.filter(
+            id=product_id,
+            is_birthday_prize=True,
+            is_active=True,
+            branch=client_profile.branch,
+        ).first()
+        if not product:
+            raise ValidationError(
+                message='Приз дня рождения не найден',
+                code='product_not_found',
             )
 
-            return inventory_item
+        inventory_item = Inventory.objects.create(
+            client=client_profile,
+            product=product,
+            acquired_from='BIRTHDAY_PRIZE',
+        )
+
+        return inventory_item
 
     # ------------------------------------------------------------------
     # ACTIVATE
