@@ -82,6 +82,7 @@ class SuperPrizeSerializer(serializers.ModelSerializer):
 class BirthdayStatusSerializer(serializers.Serializer):
     """Ответ о статусе ДР режима"""
     is_birthday_mode = serializers.BooleanField()
+    already_claimed = serializers.BooleanField()
 
 
 class InventoryCooldownSerializer(serializers.ModelSerializer):

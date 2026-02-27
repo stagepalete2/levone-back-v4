@@ -106,8 +106,9 @@ class BirthdayPrizeView(APIView):
             return Response(CatalogResponseSerializer(
                 products, many=True, context={'request': request}).data)
         except ValidationError as e:
-            sc = status.HTTP_403_FORBIDDEN if e.code == 'not_birthday_window' else status.HTTP_404_NOT_FOUND
-            return Response({'code': e.code, 'message': e.message}, status=sc)
+            if e.code in ('not_birthday_window', 'already_claimed'):
+                return Response({'code': e.code, 'message': e.message}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'code': e.code, 'message': e.message}, status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request, format=None):
         s = BirthdayPrizeClaimSerializer(data=request.data)
@@ -120,6 +121,8 @@ class BirthdayPrizeView(APIView):
             return Response(InventorySerializer(item, context={'request': request}).data)
         except ValidationError as e:
             if e.code == 'not_birthday_window':
+                return Response({'code': e.code, 'message': e.message}, status=status.HTTP_403_FORBIDDEN)
+            if e.code == 'already_claimed':
                 return Response({'code': e.code, 'message': e.message}, status=status.HTTP_403_FORBIDDEN)
             sc = status.HTTP_404_NOT_FOUND if e.code in ['not_found', 'product_not_found'] else status.HTTP_400_BAD_REQUEST
             return Response({'code': e.code, 'message': e.message}, status=sc)

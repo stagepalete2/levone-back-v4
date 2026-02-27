@@ -164,11 +164,22 @@ class InventoryService:
     @staticmethod
     def get_birthday_status(vk_user_id: int, branch_id: int) -> dict:
         """
-        Возвращает {'is_birthday_mode': bool}
+        Возвращает {'is_birthday_mode': bool, 'already_claimed': bool}
+        already_claimed=True если подарок ДР уже получен в любом филиале в этом году.
         """
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
         in_window, _ = _is_in_birthday_window(client_profile.birth_date)
-        return {'is_birthday_mode': in_window}
+
+        already_claimed = False
+        if in_window:
+            today = timezone.now().date()
+            already_claimed = Inventory.objects.filter(
+                client__client=client_profile.client,
+                acquired_from='BIRTHDAY_PRIZE',
+                created_at__year=today.year,
+            ).exists()
+
+        return {'is_birthday_mode': in_window, 'already_claimed': already_claimed}
 
     # ------------------------------------------------------------------
     # SUPER PRIZE (обычный, из игры)
@@ -242,6 +253,18 @@ class InventoryService:
                 code='not_birthday_window',
             )
 
+        today = timezone.now().date()
+        already_claimed = Inventory.objects.filter(
+            client__client=client_profile.client,
+            acquired_from='BIRTHDAY_PRIZE',
+            created_at__year=today.year,
+        ).exists()
+        if already_claimed:
+            raise ValidationError(
+                message='Подарок дня рождения уже получен в одном из филиалов в этом году',
+                code='already_claimed',
+            )
+
         return Product.objects.filter(
             branch=client_profile.branch,
             is_birthday_prize=True,
@@ -261,6 +284,19 @@ class InventoryService:
             raise ValidationError(
                 message='День рождения не активен (окно ±5 дней)',
                 code='not_birthday_window',
+            )
+
+        # Проверяем, не получал ли этот человек подарок ДР в ЛЮБОМ другом филиале в этом году
+        today = timezone.now().date()
+        already_claimed = Inventory.objects.filter(
+            client__client=client_profile.client,
+            acquired_from='BIRTHDAY_PRIZE',
+            created_at__year=today.year,
+        ).exists()
+        if already_claimed:
+            raise ValidationError(
+                message='Подарок дня рождения уже получен в одном из филиалов в этом году',
+                code='already_claimed',
             )
 
         product = Product.objects.filter(
