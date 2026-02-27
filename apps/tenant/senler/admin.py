@@ -6,9 +6,22 @@ from django.db import connection
 from django.db.models import Count, Q
 from apps.tenant.senler.models import MailingCampaign, VKConnection, MessageLog, MessageTemplate
 from apps.tenant.senler.tasks import process_mass_campaign
+from django import forms
 
+class VKConnectionForm(forms.ModelForm):
+    class Meta:
+        model = VKConnection
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Если объект уже существует и токен есть, 
+        # подменяем в форме зашифрованную строку на расшифрованную
+        if self.instance and self.instance.pk and self.instance.access_token:
+            self.initial['access_token'] = self.instance.raw_token
 
 class VKConnectionAdmin(admin.ModelAdmin):
+    form = VKConnectionForm
     list_display = ('group_id', 'updated_at')
 
 
