@@ -53,10 +53,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from apps.tenant.branch.models import Branch
-        from apps.tenant.stats.models import (
-            GuestRFScore, RFMigrationLog, BranchSegmentSnapshot, RFSettings
-        )
+        from django_tenants.utils import get_tenant_model, tenant_context
 
         branch_ids = options.get('branches') or []
         all_branches = options.get('all_branches', False)
@@ -66,29 +63,46 @@ class Command(BaseCommand):
             self.stderr.write('Укажите --branch ID или --all')
             return
 
-        if all_branches:
-            branches = Branch.objects.all()
-        else:
-            branches = Branch.objects.filter(id__in=branch_ids)
+        TenantModel = get_tenant_model()
+        tenants = TenantModel.objects.exclude(schema_name='public')
 
-        if not branches.exists():
-            self.stderr.write('Филиалы не найдены')
+        if not tenants.exists():
+            self.stderr.write('Тенанты не найдены')
             return
 
         self.stdout.write('\n' + '='*60)
         self.stdout.write('ПРЕДПРОСМОТР ОБНУЛЕНИЯ СТАТИСТИКИ')
         self.stdout.write('='*60)
 
-        for branch in branches:
-            rf_count     = GuestRFScore.objects.filter(client__branch=branch).count()
-            log_count    = RFMigrationLog.objects.filter(client__branch=branch).count()
-            snap_count   = BranchSegmentSnapshot.objects.filter(branch=branch).count()
-            self.stdout.write(
-                f'\nФилиал: {branch.name} (ID={branch.id})\n'
-                f'  GuestRFScore:          {rf_count} записей\n'
-                f'  RFMigrationLog:        {log_count} записей\n'
-                f'  BranchSegmentSnapshot: {snap_count} записей\n'
-            )
+        reset_dt = timezone.now()
+
+        for tenant in tenants:
+            with tenant_context(tenant):
+                from apps.tenant.branch.models import Branch
+                from apps.tenant.stats.models import (
+                    GuestRFScore, RFMigrationLog, BranchSegmentSnapshot, RFSettings
+                )
+
+                if all_branches:
+                    branches = Branch.objects.all()
+                else:
+                    branches = Branch.objects.filter(id__in=branch_ids)
+
+                if not branches.exists():
+                    continue
+
+                self.stdout.write(f'\nТенант: {tenant.schema_name}')
+
+                for branch in branches:
+                    rf_count   = GuestRFScore.objects.filter(client__branch=branch).count()
+                    log_count  = RFMigrationLog.objects.filter(client__branch=branch).count()
+                    snap_count = BranchSegmentSnapshot.objects.filter(branch=branch).count()
+                    self.stdout.write(
+                        f'  Филиал: {branch.name} (ID={branch.id})\n'
+                        f'    GuestRFScore:          {rf_count} записей\n'
+                        f'    RFMigrationLog:        {log_count} записей\n'
+                        f'    BranchSegmentSnapshot: {snap_count} записей'
+                    )
 
         self.stdout.write('\nЧТО НЕ БУДЕТ ЗАТРОНУТО:')
         self.stdout.write('  ✓ CoinTransaction (балансы монет)')
@@ -103,27 +117,38 @@ class Command(BaseCommand):
             )
             return
 
-        # Выполняем обнуление
-        reset_dt = timezone.now()
+        # Выполняем обнуление по всем тенантам
         total_rf = total_log = total_snap = 0
 
-        for branch in branches:
-            rf_deleted, _    = GuestRFScore.objects.filter(client__branch=branch).delete()
-            log_deleted, _   = RFMigrationLog.objects.filter(client__branch=branch).delete()
-            snap_deleted, _  = BranchSegmentSnapshot.objects.filter(branch=branch).delete()
+        for tenant in tenants:
+            with tenant_context(tenant):
+                from apps.tenant.branch.models import Branch
+                from apps.tenant.stats.models import (
+                    GuestRFScore, RFMigrationLog, BranchSegmentSnapshot, RFSettings
+                )
 
-            # Устанавливаем дату обнуления — RFM будет считать только с этого момента
-            settings, _ = RFSettings.objects.get_or_create(branch=branch)
-            settings.stats_reset_date = reset_dt
-            settings.save(update_fields=['stats_reset_date'])
+                if all_branches:
+                    branches = Branch.objects.all()
+                else:
+                    branches = Branch.objects.filter(id__in=branch_ids)
 
-            total_rf   += rf_deleted
-            total_log  += log_deleted
-            total_snap += snap_deleted
+                for branch in branches:
+                    rf_deleted, _   = GuestRFScore.objects.filter(client__branch=branch).delete()
+                    log_deleted, _  = RFMigrationLog.objects.filter(client__branch=branch).delete()
+                    snap_deleted, _ = BranchSegmentSnapshot.objects.filter(branch=branch).delete()
 
-            self.stdout.write(self.style.SUCCESS(
-                f'✓ {branch.name}: удалено RF={rf_deleted}, log={log_deleted}, snap={snap_deleted}'
-            ))
+                    settings, _ = RFSettings.objects.get_or_create(branch=branch)
+                    settings.stats_reset_date = reset_dt
+                    settings.save(update_fields=['stats_reset_date'])
+
+                    total_rf   += rf_deleted
+                    total_log  += log_deleted
+                    total_snap += snap_deleted
+
+                    self.stdout.write(self.style.SUCCESS(
+                        f'✓ [{tenant.schema_name}] {branch.name}: '
+                        f'RF={rf_deleted}, log={log_deleted}, snap={snap_deleted}'
+                    ))
 
         self.stdout.write(self.style.SUCCESS(
             f'\n✅ Обнуление завершено. Дата сброса: {reset_dt.strftime("%d.%m.%Y %H:%M")}\n'
