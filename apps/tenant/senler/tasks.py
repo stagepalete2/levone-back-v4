@@ -31,12 +31,12 @@ def schedule_post_game_message(client_branch_id, schema_name):
         defaults = MessageTemplate.get_defaults()
         msg_text = MessageTemplate.get_text('post_game', defaults.get('post_game', ''))
 
-        if msg_text:
-            send_single_message.apply_async(
-                args=[client_branch_id, msg_text],
-                eta=target_time,
-                kwargs={'schema_name': schema_name},
-            )
+        # И передается в Celery как готовая строка
+        send_single_message.apply_async(
+            args=[client_branch_id, msg_text],
+            eta=target_time,
+            kwargs={'schema_name': schema_name},
+        )
 
 
 @shared_task
@@ -129,26 +129,34 @@ def check_tenant_birthdays(schema_name):
 
 
 @shared_task
-def send_single_message(client_branch_id, text, attachment=None, campaign_id=None, schema_name=None):
-    """Задача для отправки ОДНОГО сообщения (используется в post-game)."""
+def send_single_message(client_branch_id, text, attachment=None, campaign_id=None, schema_name=None, template_type=None):
+    """Задача для отправки ОДНОГО сообщения."""
     if schema_name:
         with schema_context(schema_name):
-            _perform_send_single(client_branch_id, text, attachment, campaign_id)
+            _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type)
     else:
-        _perform_send_single(client_branch_id, text, attachment, campaign_id)
+        _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type)
 
-
-def _perform_send_single(client_branch_id, text, attachment, campaign_id):
+def _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type=None):
+    from apps.tenant.senler.models import MessageTemplate # Импортируем локально во избежание циклических импортов
+    
     try:
         cb = ClientBranch.objects.get(id=client_branch_id)
+        
+        # Если передан template_type, достаем актуальный текст из БД прямо сейчас
+        if template_type and not text:
+            defaults = MessageTemplate.get_defaults()
+            text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))
+            
+        if not text:
+            return # Если текста совсем нет, ничего не отправляем
+            
         campaign = MailingCampaign.objects.get(id=campaign_id) if campaign_id else None
         service = VKService()
         if service.is_configured:
             service.send_message(cb, text, attachment, campaign)
     except ClientBranch.DoesNotExist:
         pass
-
-
 # --- Основная логика массовой рассылки ---
 
 @shared_task
