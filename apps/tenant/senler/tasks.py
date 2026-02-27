@@ -16,28 +16,24 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def schedule_post_game_message(client_branch_id, schema_name):
-    """Вызывается сразу после игры. Сама вычисляет, когда отправить сообщение."""
     with schema_context(schema_name):
         now = timezone.localtime()
         target_time = now + datetime.timedelta(hours=3)
 
-        # Тихие часы (21:00 - 09:00)
         if target_time.hour >= 21:
             target_time = target_time + datetime.timedelta(days=1)
             target_time = target_time.replace(hour=9, minute=0, second=0)
         elif target_time.hour < 9:
             target_time = target_time.replace(hour=9, minute=0, second=0)
 
-        defaults = MessageTemplate.get_defaults()
-        msg_text = MessageTemplate.get_text('post_game', defaults.get('post_game', ''))
-
-        # И передается в Celery как готовая строка
         send_single_message.apply_async(
-            args=[client_branch_id, msg_text],
+            args=[client_branch_id, None],
             eta=target_time,
-            kwargs={'schema_name': schema_name},
+            kwargs={
+                'schema_name': schema_name,
+                'template_type': 'post_game'
+            },
         )
-
 
 @shared_task
 def check_birthdays_daily():
