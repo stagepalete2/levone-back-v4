@@ -8,7 +8,6 @@ import datetime
 from apps.tenant.senler.models import MailingCampaign
 from apps.tenant.senler.services import VKService
 from apps.tenant.branch.models import ClientBranch
-from apps.tenant.inventory.core import InventoryService
 from apps.tenant.senler.models import MessageTemplate
 
 logger = logging.getLogger(__name__)
@@ -35,6 +34,7 @@ def schedule_post_game_message(client_branch_id, schema_name):
             },
         )
 
+
 @shared_task
 def check_birthdays_daily():
     """Диспетчер: запускает проверку ДР для каждого тенанта."""
@@ -51,14 +51,19 @@ def check_tenant_birthdays(schema_name):
     Ежедневная проверка ДР для конкретного тенанта.
 
     Логика:
-      1. За 7 дней до ДР — выдача подарка + сообщение «через неделю твой ДР»
-      2. В день ДР     — сообщение «с ДР!» (подарок уже был выдан на шаге 1 или 0 дней)
-      3. Аннулирование — удаляем не активированные призы через 5+1 дней после ДР
+      1. За 7 дней до ДР — отправляем сообщение «через неделю твой ДР»
+      2. За 1 день до ДР — отправляем сообщение «завтра твой ДР»
     """
     with schema_context(schema_name):
         try:
             vk_service = VKService()
+
+            if not vk_service.is_configured:
+                logger.info(f"[{schema_name}] VK не настроен, пропускаем рассылку ДР.")
+                return
+
             today = timezone.now().date()
+            defaults = MessageTemplate.get_defaults()
 
             campaign_title = f"День Рождения (auto) {today.strftime('%d.%m.%Y')}"
             campaign, _ = MailingCampaign.objects.get_or_create(
@@ -71,57 +76,47 @@ def check_tenant_birthdays(schema_name):
             )
 
             # ----------------------------------------------------------
-            # ЗА 7 ДНЕЙ: выдача подарка + первое сообщение
+            # ЗА 7 ДНЕЙ: сообщение «через неделю твой ДР»
             # ----------------------------------------------------------
             target_date_7 = today + datetime.timedelta(days=7)
-            created_prizes = InventoryService.grant_birthday_prizes_batch(target_date_7)
-            if created_prizes > 0:
-                logger.info(f"[{schema_name}] Granted {created_prizes} birthday prizes (7d ahead).")
-
-            if vk_service.is_configured:
-                clients_7 = ClientBranch.objects.filter(
-                    birth_date__month=target_date_7.month,
-                    birth_date__day=target_date_7.day,
+            clients_7 = ClientBranch.objects.filter(
+                birth_date__month=target_date_7.month,
+                birth_date__day=target_date_7.day,
+                client__vk_user_id__isnull=False,
+            )
+            if clients_7.exists():
+                msg_text = MessageTemplate.get_text(
+                    'birthday_7days',
+                    defaults.get('birthday_7days', '')
                 )
-                if clients_7.exists():
-                    defaults = MessageTemplate.get_defaults()
-                    msg_text = MessageTemplate.get_text('birthday_7days', defaults.get('birthday_7days', ''))
-                    if msg_text:
-                        vk_service.send_batch_messages(list(clients_7), msg_text, campaign=campaign)
-
-            # ----------------------------------------------------------
-            # В ДЕНЬ ДР: сообщение + экстренная выдача если не было
-            # ----------------------------------------------------------
-            try:
-                created_now = InventoryService.grant_birthday_prizes_batch(today)
-                if created_now:
-                    logger.info(f"[{schema_name}] Emergency grant: {created_now} prizes for TODAY.")
-            except Exception as e:
-                logger.error(f"Error granting immediate prizes: {e}")
-
-            if vk_service.is_configured:
-                clients_today = ClientBranch.objects.filter(
-                    birth_date__month=today.month,
-                    birth_date__day=today.day,
-                )
-                if clients_today.exists():
-                    logger.info(f"[{schema_name}] Found {clients_today.count()} birthdays today!")
-                    defaults = MessageTemplate.get_defaults()
-                    msg_text = MessageTemplate.get_text('birthday_today', defaults.get('birthday_today', ''))
-                    if msg_text:
-                        vk_service.send_batch_messages(list(clients_today), msg_text, campaign=campaign)
+                if msg_text:
+                    vk_service.send_batch_messages(list(clients_7), msg_text, campaign=campaign)
+                    logger.info(f"[{schema_name}] Отправлено {clients_7.count()} сообщений (7 дней до ДР).")
                 else:
-                    logger.debug(f"[{schema_name}] No birthdays today.")
+                    logger.warning(f"[{schema_name}] Шаблон birthday_7days не найден или неактивен.")
 
             # ----------------------------------------------------------
-            # АННУЛИРОВАНИЕ просроченных призов (окно ±5 дней закрылось)
+            # ЗА 1 ДЕНЬ: сообщение «завтра твой ДР»
             # ----------------------------------------------------------
-            revoked_count = InventoryService.revoke_expired_birthday_prizes()
-            if revoked_count > 0:
-                logger.info(f"[{schema_name}] Revoked {revoked_count} expired birthday prizes.")
+            target_date_1 = today + datetime.timedelta(days=1)
+            clients_1 = ClientBranch.objects.filter(
+                birth_date__month=target_date_1.month,
+                birth_date__day=target_date_1.day,
+                client__vk_user_id__isnull=False,
+            )
+            if clients_1.exists():
+                msg_text = MessageTemplate.get_text(
+                    'birthday_1day',
+                    defaults.get('birthday_1day', '')
+                )
+                if msg_text:
+                    vk_service.send_batch_messages(list(clients_1), msg_text, campaign=campaign)
+                    logger.info(f"[{schema_name}] Отправлено {clients_1.count()} сообщений (1 день до ДР).")
+                else:
+                    logger.warning(f"[{schema_name}] Шаблон birthday_1day не найден или неактивен.")
 
         except Exception as e:
-            logger.error(f"Error checking birthdays for tenant {schema_name}: {e}")
+            logger.error(f"[{schema_name}] Ошибка при проверке ДР: {e}")
 
 
 @shared_task
@@ -133,26 +128,28 @@ def send_single_message(client_branch_id, text, attachment=None, campaign_id=Non
     else:
         _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type)
 
+
 def _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type=None):
-    from apps.tenant.senler.models import MessageTemplate # Импортируем локально во избежание циклических импортов
-    
+    from apps.tenant.senler.models import MessageTemplate
+
     try:
         cb = ClientBranch.objects.get(id=client_branch_id)
-        
-        # Если передан template_type, достаем актуальный текст из БД прямо сейчас
+
         if template_type and not text:
             defaults = MessageTemplate.get_defaults()
             text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))
-            
+
         if not text:
-            return # Если текста совсем нет, ничего не отправляем
-            
+            return
+
         campaign = MailingCampaign.objects.get(id=campaign_id) if campaign_id else None
         service = VKService()
         if service.is_configured:
             service.send_message(cb, text, attachment, campaign)
     except ClientBranch.DoesNotExist:
         pass
+
+
 # --- Основная логика массовой рассылки ---
 
 @shared_task
@@ -191,7 +188,7 @@ def process_mass_campaign(campaign_id, schema_name):
 
         attachment_str = None
         if campaign.image and client_ids:
-            pass  # логика загрузки картинки в ВК (без изменений)
+            pass  # логика загрузки картинки в ВК
 
         batch_size = 100
         for i in range(0, len(client_ids), batch_size):

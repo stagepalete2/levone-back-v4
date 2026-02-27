@@ -130,7 +130,6 @@ class MessageTemplate(TimeStampedModel):
     """
     TEMPLATE_TYPES = [
         ('post_game', 'После игры (3 часа)'),
-        ('birthday_today', 'ДР сегодня'),
         ('birthday_7days', 'ДР через 7 дней'),
         ('birthday_1day', 'ДР через 1 день'),
         ('welcome', 'Приветственное сообщение'),
