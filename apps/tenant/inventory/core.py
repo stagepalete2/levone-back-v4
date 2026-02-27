@@ -244,8 +244,8 @@ class InventoryService:
     @staticmethod
     def get_client_birthday_prizes(vk_user_id: int, branch_id: int):
         """
-        Возвращает ожидающий BIRTHDAY SuperPrize (не активирован).
-        Только если гость находится в окне ДР.
+        Возвращает список доступных подарков ДР (catalog.Product, is_birthday_prize=True).
+        Только если гость находится в окне ДР и есть неиспользованный SuperPrize(BIRTHDAY).
         """
         client_profile = ClientService.get_client_profile(vk_user_id, branch_id)
 
@@ -260,19 +260,27 @@ class InventoryService:
         year_start = datetime.date(today.year, 1, 1)
         year_end   = datetime.date(today.year, 12, 31)
 
-        # prizes = SuperPrize.objects.filter(
-        #     client=client_profile,
-        #     acquired_from='BIRTHDAY',
-        #     activated_at__isnull=True,
-        #     created_at__date__gte=year_start,
-        #     created_at__date__lte=year_end,
-        # ).order_by('created_at')
+        has_pending = SuperPrize.objects.filter(
+            client=client_profile,
+            acquired_from='BIRTHDAY',
+            activated_at__isnull=True,
+            created_at__date__gte=year_start,
+            created_at__date__lte=year_end,
+        ).exists()
 
-        prizes = Product.objects.filter(
-            is_birthday_prize=True
-        )
+        if not has_pending:
+            raise ValidationError(
+                message='Нет доступного приза дня рождения',
+                code='not_found',
+            )
 
-        return prizes
+        products = Product.objects.filter(
+            branch=client_profile.branch,
+            is_birthday_prize=True,
+            is_active=True,
+        ).order_by('-created_at')
+
+        return products
 
     @staticmethod
     def claim_birthday_prize(vk_user_id: int, branch_id: int, product_id: int):
@@ -406,4 +414,3 @@ class CooldownService:
             cooldown.last_activated_at = timezone.now()
             cooldown.save(update_fields=['last_activated_at'])
         return cooldown
-

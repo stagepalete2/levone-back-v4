@@ -79,24 +79,6 @@ class SuperPrizeSerializer(serializers.ModelSerializer):
         return serializer.data
 
 
-class BirthdayPrizeSerializer(serializers.ModelSerializer):
-    """Отображение неактивированного приза ДР + список доступных призов ДР"""
-    birthday_prizes = serializers.SerializerMethodField()
-
-    class Meta:
-        model = SuperPrize
-        fields = ['id', 'client', 'acquired_from', 'is_used', 'birthday_prizes']
-
-    def get_birthday_prizes(self, instance):
-        prizes = Product.objects.filter(
-            branch=instance.client.branch,
-            is_birthday_prize=True,
-            is_active=True,
-        ).order_by('-created_at')
-        serializer = CatalogResponseSerializer(prizes, many=True, context={'request': self.context.get('request')})
-        return serializer.data
-
-
 class BirthdayStatusSerializer(serializers.Serializer):
     """Ответ о статусе ДР режима"""
     is_birthday_mode = serializers.BooleanField()

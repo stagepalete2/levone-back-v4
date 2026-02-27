@@ -8,12 +8,12 @@ from apps.tenant.inventory.api.serializers import (
     InventorySerializer,
     SuperPrizeSerializer,
     SuperPrizeClaimSerializer,
-    BirthdayPrizeSerializer,
     BirthdayPrizeClaimSerializer,
     BirthdayStatusSerializer,
     InventoryCooldownSerializer,
     InventoryActivateSerializer,
 )
+from apps.tenant.catalog.api.serializers import CatalogResponseSerializer
 from apps.tenant.inventory.core import InventoryService, CooldownService
 
 
@@ -91,12 +91,13 @@ class BirthdayStatusView(APIView):
 class BirthdayPrizeView(APIView):
     """
     GET  /api/v1/birthday/prize/?vk_user_id=1&branch_id=1
-         Просмотр доступных призов ДР. Активировать нельзя — только в кафе по коду.
+         Возвращает список доступных подарков ДР (catalog.Product).
+         Только если гость в окне ±5 дней ДР и есть неиспользованный SuperPrize(BIRTHDAY).
 
     POST /api/v1/birthday/prize/
          Body: { vk_user_id, branch_id, product_id }
-         Резервирует конкретный приз ДР → создаёт Inventory с activated_at=None.
-         Активация произойдёт только через InventoryActivateView в кафе.
+         Резервирует выбранный приз ДР → создаёт Inventory с activated_at=None.
+         Активация только через InventoryActivateView в кафе.
     """
     def get(self, request, format=None):
         s = InventoryRequestSerializer(data=request.query_params)
@@ -104,10 +105,10 @@ class BirthdayPrizeView(APIView):
             return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
         d = s.validated_data
         try:
-            prizes = InventoryService.get_client_birthday_prizes(
+            products = InventoryService.get_client_birthday_prizes(
                 vk_user_id=d['vk_user_id'], branch_id=d['branch_id'])
-            return Response(BirthdayPrizeSerializer(prizes, many=True,
-                context={'request': request}).data)
+            return Response(CatalogResponseSerializer(
+                products, many=True, context={'request': request}).data)
         except ValidationError as e:
             sc = status.HTTP_403_FORBIDDEN if e.code == 'not_birthday_window' else status.HTTP_404_NOT_FOUND
             return Response({'code': e.code, 'message': e.message}, status=sc)
