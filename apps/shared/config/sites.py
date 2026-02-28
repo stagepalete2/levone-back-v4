@@ -51,16 +51,21 @@ class TenantAdminSite(admin.AdminSite):
         if not user.is_active or not user.is_staff:
             return False
 
+        # Глобальный суперпользователь без привязки к компании — полный доступ
         if user.is_superuser and not user.company_id:
             return True
 
-        if not user.company_id:
-            return False
+        current_tenant_id = request.tenant.id
 
-        if user.company_id != request.tenant.id:
-            return False
+        # Проверяем основной (FK) тенант
+        if user.company_id and user.company_id == current_tenant_id:
+            return True
 
-        return True
+        # Проверяем список доступных тенантов (M2M)
+        if user.companies.filter(pk=current_tenant_id).exists():
+            return True
+
+        return False
 
     def index(self, request, extra_context=None):
         extra_context = extra_context or {}
@@ -93,6 +98,11 @@ class TenantAdminSite(admin.AdminSite):
         
         extra_context['today'] = today
         extra_context['branch_codes'] = branch_codes
+        # Передаём флаг наличия права просмотра статистики в шаблон
+        extra_context['can_view_stats'] = (
+            request.user.is_superuser
+            or request.user.has_perm('users.can_view_stats')
+        )
         return super().index(request, extra_context=extra_context)
     
     class Media:
@@ -102,3 +112,4 @@ class TenantAdminSite(admin.AdminSite):
 
 public_admin = PublicAdminSite(name='public_admin')
 tenant_admin = TenantAdminSite(name='tenant_admin')
+

@@ -27,14 +27,16 @@ def generate_daily_code_for_all_tenants():
 
 @shared_task()
 def daily_rfm_update():
-    """Запускает расчет RFM для каждого тенанта отдельно"""
     TenantModel = get_tenant_model()
-    tenants = TenantModel.objects.exclude(schema_name='public').values_list('pk', flat=True)
     
-    logger.info(f"Starting RFM update for {len(tenants)} tenants.")
+    tenant_ids = list(
+        TenantModel.objects.exclude(schema_name='public').values_list('pk', flat=True)
+    )
     
-    for tenant_id in tenants:
-        process_tenant_rfm.delay(str(tenant_id))
+    logger.info(f"Starting RFM update for {len(tenant_ids)} tenants.")
+    
+    for tenant_id in tenant_ids:
+        process_tenant_rfm.delay(tenant_id)
 
 
 # --- Workers (Задачи-исполнители для конкретного тенанта) ---
