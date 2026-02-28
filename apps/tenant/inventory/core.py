@@ -268,7 +268,6 @@ class InventoryService:
         return Product.objects.filter(
             branch=client_profile.branch,
             is_birthday_prize=True,
-            is_active=True,
         ).order_by('-created_at')
 
     @staticmethod
