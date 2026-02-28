@@ -26,6 +26,15 @@ class GlobalUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
         ('SaaS Info', {'fields': ('company', 'companies',)}),
     )
+
+    # Django 5.0+ добавил usable_password в add_fieldsets — переопределяем вручную
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('username', 'password1', 'password2'),
+        }),
+    )
+
     list_display = ('username', 'company', 'is_staff', 'is_superuser')
     filter_horizontal = ('groups', 'user_permissions', 'companies',)
 
