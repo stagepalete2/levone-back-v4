@@ -1,0 +1,16 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block submit_buttons_bottom %}
+    {{ block.super }}
+    {% if show_duplicate_btn and original %}
+    <div class="submit-row" style="margin-top: 8px;">
+        <a href="{{ duplicate_url }}"
+           class="button"
+           style="background: #417690; color: #fff; padding: 10px 16px;
+                  border-radius: 4px; text-decoration: none; display: inline-block; font-size: 13px;">
+            📋 Дублировать в рестораны…
+        </a>
+    </div>
+    {% endif %}
+{% endblock %}
