@@ -36,29 +36,20 @@ class BaseAdminStatsView(LoginRequiredMixin, UserPassesTestMixin):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Добавляем контекст админки (меню, хедеры)
         context.update(tenant_admin.each_context(self.request))
         return context
 
 
 class PeriodMixin:
-    """
-    Миксин, читающий GET-параметр ?period= или custom_date_from/custom_date_to
-    и добавляющий в контекст resolved-диапазон + список вариантов для UI.
-    """
-
     def get_period_context(self):
-        # Проверяем, есть ли пользовательские даты
         custom_date_from = self.request.GET.get('custom_date_from')
         custom_date_to = self.request.GET.get('custom_date_to')
         
         if custom_date_from and custom_date_to:
-            # Используем пользовательские даты
             date_from, date_to, period_code = GeneralStatsService.resolve_custom_period(
                 custom_date_from, custom_date_to
             )
         else:
-            # Используем предустановленный период
             period_code = self.request.GET.get('period', GeneralStatsService.DEFAULT_PERIOD)
             date_from, date_to, period_code = GeneralStatsService.resolve_period(period_code)
         
@@ -73,11 +64,6 @@ class PeriodMixin:
 
 
 class BranchMixin:
-    """
-    Миксин, читающий GET-параметр ?branch= и добавляющий
-    в контекст информацию о выбранном филиале.
-    """
-
     def get_branch_context(self):
         branch_id = self.request.GET.get('branch')
         selected_branch = None
@@ -107,18 +93,17 @@ class StatisticsView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView)
         context.update(period_ctx)
         context.update(branch_ctx)
 
-        # Получаем статистику за выбранный период и филиал.
-        # Передаём date_from/date_to явно, чтобы кастомный период не терялся:
-        # внутри get_dashboard_stats period_code='custom' не в PERIOD_CHOICES
-        # и без явных дат упал бы в fallback DEFAULT_PERIOD (30d).
+        # skip_pos=True — POS данные (IIKO/Dooglys) грузятся асинхронно
+        # через AJAX-запрос на /analytics/api/v1/pos-stats/
+        # чтобы страница открывалась мгновенно
         context["stats"] = GeneralStatsService.get_dashboard_stats(
             period_code=period_ctx['period_code'],
             branch_id=branch_ctx.get('selected_branch_id'),
             date_from=period_ctx.get('date_from'),
             date_to=period_ctx.get('date_to'),
+            skip_pos=True,
         )
 
-        # Build period_params string for template links (fixes {% with %} scoping bug)
         branch_id = branch_ctx.get('selected_branch_id')
         custom_from = period_ctx.get('custom_date_from')
         custom_to = period_ctx.get('custom_date_to')
@@ -150,14 +135,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
-        # Базовый QuerySet
         qs = ClientBranch.objects.all()
 
-        # Фильтр по филиалу если выбран
         if branch_ctx.get('selected_branch_id'):
             qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
 
-        # period_qs с фильтрацией по обеим датам
         if date_from and date_to:
             period_qs = qs.filter(created_at__gte=date_from, created_at__lte=date_to)
         elif date_from:
@@ -167,64 +149,36 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
         branch_id = branch_ctx.get('selected_branch_id')
 
-        # --- КАРТА СТАТИСТИКИ ---
         title_map = {
-            # 1. QR-сканирований за период
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
-
-            # 2. Общее количество гостей в рассылке (подписались через приложение)
             "mailing_subscribers": (
                 'Общее количество гостей в рассылке',
                 qs.filter(is_joined_community=True)
             ),
-
-            # 3. Новые в группе и рассылке, получившие первый подарок
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
-
-            # 4. Вернулись и сыграли в игру повторно
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
-
-            # 5. Купили подарки за баллы
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
-
-            # 6. Подписались в сообщество ВК
             "group_subscribers": (
                 'Подписались в сообщество ВК',
                 qs.filter(is_joined_community=True)
             ),
-
-            # 7. Подписались на рассылку ВК (через наше приложение)
             "mailing_period": (
                 'Подписались на рассылку ВК',
                 period_qs.filter(is_joined_community=True)
             ),
-
-            # 8. Отправлено поздравлений с ДР
             "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
-
-            # 9. Пришли отметить день рождения
             "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
-
-            # 10. % открываемости — клиенты прочитавшие сообщение
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
-
-            # 11. Опубликовали историй в ВК
             "clients_posted_story": (
                 'Опубликовали историй в ВК',
                 period_qs.filter(is_story_uploaded=True)
             ),
-
-            # 12. Перешли из историй ВК
             "clients_from_referral": (
                 'Перешли из историй ВК',
                 period_qs.filter(invited_by__isnull=False)
             ),
-
-            # 13. Гостей по POS-системе (внешние данные — нет прямого QS)
-            # 14. Индекс сканирования (внешние данные)
         }
 
-        # Статистика из внешних POS-систем — список гостей недоступен
         external_stats = {
             "pos_guests":   'Гостей по POS-системе',
             "scan_index":   'Индекс сканирования',
@@ -251,8 +205,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             {"title": context.get('stat', stat_name), "url": ""},
         ]
         return context
-
-    # ── Вспомогательные методы (вынесены, чтобы не считать всё подряд) ──
 
     @staticmethod
     def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
@@ -288,7 +240,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты из группы ВК, получившие первый подарок за игру."""
         from apps.tenant.inventory.models import SuperPrize
         prize_filters = Q(acquired_from='GAME')
         if date_from:
@@ -305,7 +256,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_bought_prizes_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, купившие подарки за баллы."""
         tx_filters = Q(type='EXPENSE')
         if date_from:
             tx_filters &= Q(created_at__gte=date_from)
@@ -318,7 +268,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, отсканировавшие QR за период (через ClientBranchVisit)."""
         from apps.tenant.branch.models import ClientBranchVisit
         visit_filters = Q()
         if date_from:
@@ -332,7 +281,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, получившие поздравление с ДР (MessageLog с birthday-типами)."""
         from apps.tenant.senler.models import MessageLog
         log_filters = Q(campaign__title__icontains="День Рождения")
         if date_from:
@@ -346,7 +294,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
-        """Клиенты, прочитавшие хотя бы одно сообщение за период (открываемость)."""
         from apps.tenant.senler.models import MessageLog
         log_filters = Q(is_read=True)
         if date_from:
@@ -360,7 +307,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
 
 class AwayView(LoginRequiredMixin, View):
-    """Редирект на VK профиль"""
     def get(self, request, vk_user_id, *args, **kwargs):
         url = VKIntegrationService.get_profile_url(vk_user_id)
         if not url:
@@ -369,7 +315,6 @@ class AwayView(LoginRequiredMixin, View):
 
 
 class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView):
-    """Страница отзывов из ВК с фильтрацией по тональности"""
     template_name = 'general/reviews_list.html'
 
     def get_context_data(self, **kwargs):
@@ -384,7 +329,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
         date_to = period_ctx['date_to']
         branch_id = branch_ctx.get('selected_branch_id')
 
-        # Base filter
         filters = Q()
         if date_from:
             filters &= Q(created_at__gte=date_from)
@@ -397,7 +341,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
             'client__client', 'client__branch'
         ).order_by('-created_at')
 
-        # Sentiment filter
         sentiment = self.request.GET.get('sentiment')
         if sentiment in ('POSITIVE', 'NEGATIVE', 'NEUTRAL', 'SPAM'):
             reviews = all_reviews.filter(sentiment=sentiment)
@@ -405,7 +348,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
             sentiment = None
             reviews = all_reviews
 
-        # Build back_params for link to statistics
         back_parts = []
         if branch_id:
             back_parts.append(f'branch={branch_id}')
@@ -417,7 +359,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
         elif period_ctx['period_code'] and period_ctx['period_code'] != 'custom':
             back_parts.append(f'period={period_ctx["period_code"]}')
 
-        # base_params for sentiment tabs (preserves period + branch)
         base_parts = list(back_parts)
         base_params = '&'.join(base_parts)
 
@@ -436,8 +377,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
 
 
 class ReviewReplyView(BaseAdminStatsView, View):
-    """API для отправки ответа на отзыв через VK"""
-
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads(request.body)
@@ -487,13 +426,8 @@ class RFAnalyticsDetailView(BaseAdminStatsView, DetailView):
         context = super().get_context_data(**kwargs)
         branch = self.object
 
-        # 1. Получаем данные матрицы через сервис
         matrix_data = RFAnalyticsService.get_matrix_data(branch)
-        
-        # 2. Получаем диапазоны для заголовков (F1, R1 и т.д.)
         ranges = RFAnalyticsService.get_segment_ranges(matrix_data['segments'])
-        
-        # 3. Настройки и примеры гостей
         settings_obj = RFSettings.objects.filter(branch=branch).first()
         
         top_guests = GuestRFScore.objects.filter(
@@ -529,27 +463,23 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
         context = super().get_context_data(**kwargs)
         branch = self.object
 
-        # 1. Валидация входных данных
         validator = MigrationFilterSerializer(data=self.request.GET)
         if not validator.is_valid():
             data = {'days': 30, 'segment': ''}
         else:
             data = validator.validated_data
 
-        # 2. Получение статистики через сервис
         stats = RFMigrationService.get_migration_stats(
             branch=branch, 
             days=data['days'], 
             segment_code=data.get('segment')
         )
 
-        # 3. Получение списка гостей для таблицы
         recent_guests = RFMigrationService.get_recent_migrated_guests(
             branch=branch, 
             days=data['days']
         )
 
-        # 4. Вспомогательные данные
         all_segments = RFSegment.objects.all().order_by('-code')
 
         context.update({
@@ -572,9 +502,6 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
 
 
 class RFRecalculateView(APIView):
-    """
-    Принудительный пересчёт RF для всех гостей текущего тенанта.
-    """
     def post(self, request, *args, **kwargs):
         serializer = RFRecalculateSerializer(data=request.data)
         if serializer.is_valid():
@@ -599,9 +526,6 @@ class RFRecalculateView(APIView):
 
 
 class RFSettingsSaveView(APIView):
-    """
-    Сохранение настроек и порогов RF-анализа.
-    """
     def post(self, request, *args, **kwargs):
         serializer = RFSettingsUpdateSerializer(data=request.data)
         
@@ -630,9 +554,6 @@ class RFSettingsSaveView(APIView):
 
 
 class RFGetSegmentGuest(APIView):
-    """
-    Получение списка гостей конкретного сегмента.
-    """
     def get(self, request, segment_code, *args, **kwargs):
         branch_id = request.query_params.get('branch')
         if not branch_id:
@@ -649,7 +570,6 @@ class RFGetSegmentGuest(APIView):
             
             guest_serializer = RFGuestListSerializer(result['guests_qs'], many=True)
             
-            # Calculate days since last campaign
             segment = result['segment']
             last_campaign_info = None
             if segment.last_campaign_date:
@@ -679,9 +599,6 @@ class RFGetSegmentGuest(APIView):
 
 
 class RFSegmentMailingView(APIView):
-    """
-    Отправка рассылки по сегменту RF-матрицы или по всем клиентам.
-    """
     def post(self, request, *args, **kwargs):
         branch_id = request.data.get('branch')
         segment_code = request.data.get('segment_code')
@@ -701,14 +618,12 @@ class RFSegmentMailingView(APIView):
                 return Response({"success": False, "error": "VK не настроен"}, status=400)
 
             if segment_code == 'all':
-                # Рассылка по всем клиентам филиала
                 clients = ClientBranch.objects.filter(
                     branch=branch,
                     is_allowed_message=True,
                     client__vk_user_id__isnull=False
                 ).select_related('client')
             else:
-                # Рассылка по сегменту
                 from apps.tenant.stats.models import GuestRFScore, RFSegment
                 segment = RFSegment.objects.get(code=segment_code)
                 scores = GuestRFScore.objects.filter(
@@ -717,7 +632,6 @@ class RFSegmentMailingView(APIView):
                 ).select_related('client__client')
                 clients = [s.client for s in scores if s.client.client and s.client.client.vk_user_id]
 
-                # Update last campaign date
                 segment.last_campaign_date = timezone.now()
                 segment.save(update_fields=['last_campaign_date'])
 
@@ -737,24 +651,8 @@ class RFSegmentMailingView(APIView):
         except Exception as e:
             return Response({"success": False, "error": str(e)}, status=500)
 
+
 class RFStatsResetView(APIView):
-    """
-    POST /analytics/api/v1/rf/reset-stats/
-
-    Обнуляет статистику и RFM данные для указанных филиалов.
-    Балансы монет, инвентарь, задания и попытки НЕ затрагиваются.
-
-    Body:
-        { "branch": 1 }           — один филиал
-        { "branch_ids": [1, 2] }  — несколько филиалов
-        { "all": true }           — все филиалы тенанта
-
-    После обнуления:
-        - RFM пересчитается от текущего момента при следующем запуске задачи
-        - Дашборд будет показывать данные только после даты сброса
-        - Старые данные не удаляются из CoinTransaction / Inventory
-    """
-
     def post(self, request, *args, **kwargs):
         from apps.tenant.branch.models import Branch
         from apps.tenant.stats.models import (
@@ -813,3 +711,69 @@ class RFStatsResetView(APIView):
             'reset_date': reset_dt.isoformat(),
             'branches':   results,
         }, status=status.HTTP_200_OK)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# НОВЫЙ VIEW: асинхронная загрузка POS-данных
+# ─────────────────────────────────────────────────────────────────────────────
+
+class POSStatsAPIView(BaseAdminStatsView, View):
+    """
+    GET /analytics/api/v1/pos-stats/
+
+    Возвращает данные из POS-систем (IIKO / Dooglys) и QR-сканирований.
+    Вызывается с дашборда через AJAX после загрузки страницы,
+    чтобы не блокировать рендер.
+
+    Query params:
+        period           — код периода (today, 7d, 30d, 90d, 365d, all)
+        branch           — ID филиала (опционально)
+        custom_date_from — начало произвольного периода (YYYY-MM-DD)
+        custom_date_to   — конец произвольного периода (YYYY-MM-DD)
+    """
+
+    def get(self, request, *args, **kwargs):
+        custom_date_from = request.GET.get('custom_date_from')
+        custom_date_to   = request.GET.get('custom_date_to')
+
+        if custom_date_from and custom_date_to:
+            date_from, date_to, period_code = GeneralStatsService.resolve_custom_period(
+                custom_date_from, custom_date_to
+            )
+        else:
+            period_code = request.GET.get('period', GeneralStatsService.DEFAULT_PERIOD)
+            date_from, date_to, period_code = GeneralStatsService.resolve_period(period_code)
+
+        branch_id = None
+        raw_branch = request.GET.get('branch')
+        if raw_branch:
+            try:
+                branch_id = int(raw_branch)
+            except ValueError:
+                pass
+
+        try:
+            data = GeneralStatsService.get_pos_stats(
+                period_code=period_code,
+                branch_id=branch_id,
+                date_from=date_from,
+                date_to=date_to,
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).error("POSStatsAPIView error: %s", exc)
+            data = {
+                'qr_scans_today':        0,
+                'pos_guests_today':      0,
+                'iiko_guests_today':     0,
+                'pos_guests_by_branch':  {},
+                'scan_index':            0.0,
+                'pos_date_from':         None,
+                'pos_date_to':           None,
+            }
+
+        from datetime import date
+        def _serialize(v):
+            return v.isoformat() if isinstance(v, date) else v
+
+        return JsonResponse({k: _serialize(v) for k, v in data.items()})

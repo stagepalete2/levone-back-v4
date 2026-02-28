@@ -8,10 +8,11 @@ from apps.tenant.stats.views import (
     RFAnalyticsView, RFAnalyticsDetailView,
     RFGuestMigrationAnalyticsDetailView, RFRecalculateView, RFSettingsSaveView, RFGetSegmentGuest,
     RFSegmentMailingView, RFStatsResetView,
+    POSStatsAPIView,
 )
 
 urlpatterns = [
-	path("statistics/", StatisticsView.as_view(), name="admin-statistics"),
+    path("statistics/", StatisticsView.as_view(), name="admin-statistics"),
     path('statistics/<slug:stat_name>/', StatisticsDetailView.as_view(), name='admin-statistics-detail'),
     path("away/<int:vk_user_id>/", AwayView.as_view(), name="away"),
 
@@ -21,12 +22,14 @@ urlpatterns = [
 
     path('rf/', RFAnalyticsView.as_view(), name='rf-statistics'),
     path('rf/<int:id>/', RFAnalyticsDetailView.as_view(), name='rf-detail-statistics'),
-	path('rf/<int:id>/migration/', RFGuestMigrationAnalyticsDetailView.as_view(), name='rf-migration-statistics'),
+    path('rf/<int:id>/migration/', RFGuestMigrationAnalyticsDetailView.as_view(), name='rf-migration-statistics'),
 
     path('api/v1/rf/recalculate/', RFRecalculateView.as_view(), name='rf-recalculate'),
     path('api/v1/rf/save-settings/', RFSettingsSaveView.as_view(), name='rf-settings-save'),
     path('api/v1/rf/segment-guest/<str:segment_code>/', RFGetSegmentGuest.as_view(), name='rf-segment-guests'),
     path('api/v1/rf/segment-mailing/', RFSegmentMailingView.as_view(), name='rf-segment-mailing'),
-    # Обнуление статистики (не трогает балансы)
     path('api/v1/rf/reset-stats/', RFStatsResetView.as_view(), name='rf-stats-reset'),
+
+    # POS данные (IIKO / Dooglys) — загружаются асинхронно через AJAX
+    path('api/v1/pos-stats/', POSStatsAPIView.as_view(), name='pos-stats-api'),
 ]

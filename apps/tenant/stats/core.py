@@ -26,9 +26,6 @@ logger = logging.getLogger(__name__)
 class GeneralStatsService:
     """Сервис для общей статистики (Dashboard)"""
 
-    # ────────────────────────────────────────────
-    # Предустановленные периоды (код → дней назад)
-    # ────────────────────────────────────────────
     PERIOD_CHOICES = {
         'today':     ('Сегодня',       0),
         '7d':        ('7 дней',        7),
@@ -41,10 +38,6 @@ class GeneralStatsService:
 
     @classmethod
     def resolve_period(cls, period_code: str):
-        """
-        Возвращает (date_from, date_to) по коду периода.
-        date_to всегда = now(), date_from = now() - N дней (или None для 'all').
-        """
         if period_code not in cls.PERIOD_CHOICES:
             period_code = cls.DEFAULT_PERIOD
 
@@ -52,7 +45,7 @@ class GeneralStatsService:
         date_to = now()
 
         if days is None:
-            date_from = None           # без ограничения
+            date_from = None
         elif days == 0:
             date_from = date_to.replace(hour=0, minute=0, second=0, microsecond=0)
         else:
@@ -62,20 +55,11 @@ class GeneralStatsService:
 
     @classmethod
     def resolve_custom_period(cls, date_from_str: str, date_to_str: str):
-        """
-        Возвращает (date_from, date_to) по пользовательским датам из календаря.
-        
-        :param date_from_str: Дата начала в формате YYYY-MM-DD
-        :param date_to_str: Дата окончания в формате YYYY-MM-DD
-        :return: (date_from, date_to, 'custom')
-        """
         from datetime import datetime
         try:
-            # Парсим даты
             date_from = datetime.strptime(date_from_str, '%Y-%m-%d')
             date_to = datetime.strptime(date_to_str, '%Y-%m-%d')
             
-            # Устанавливаем время: начало дня для date_from, конец дня для date_to
             date_from = timezone.make_aware(
                 date_from.replace(hour=0, minute=0, second=0, microsecond=0)
             )
@@ -85,19 +69,11 @@ class GeneralStatsService:
             
             return date_from, date_to, 'custom'
         except (ValueError, TypeError):
-            # В случае ошибки парсинга возвращаем период по умолчанию
             logger.warning(f"Invalid custom dates: {date_from_str}, {date_to_str}. Using default period.")
             return cls.resolve_period(cls.DEFAULT_PERIOD)
 
-    # ────────────────────────────────────────────
-    # Staff Engagement Index
-    # ────────────────────────────────────────────
     @staticmethod
     def get_staff_engagement_index(date_from=None, date_to=None):
-        """
-        (Games served by staff / Total games) * 100
-        Считает за указанный период; если date_from=None — за всё время.
-        """
         filters = {}
         if date_from:
             filters['created_at__gte'] = date_from
@@ -114,22 +90,126 @@ class GeneralStatsService:
 
         return int((staff_attempts / total_attempts) * 100)
 
-    # ────────────────────────────────────────────
-    # Основной метод Dashboard
-    # ────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # НОВЫЙ МЕТОД: получение данных POS-систем (вынесен для асинхронной загрузки)
+    # ─────────────────────────────────────────────────────────────────────────
+    @classmethod
+    def get_pos_stats(cls, period_code: str = None, branch_id: int = None,
+                      date_from=None, date_to=None):
+        """
+        Получение данных из POS-систем (IIKO/Dooglys) и QR-сканирований.
+
+        Вынесен в отдельный метод, чтобы вызывать асинхронно через AJAX
+        и не блокировать рендер основного дашборда.
+        """
+        from datetime import date as _date
+        from django.db.models import Q
+
+        if date_from is None and date_to is None:
+            date_from, date_to, period_code = cls.resolve_period(
+                period_code or cls.DEFAULT_PERIOD
+            )
+
+        if period_code == 'today' or date_from is None:
+            pos_date_from = _date.today()
+            pos_date_to   = _date.today()
+        else:
+            pos_date_from = date_from.date() if hasattr(date_from, 'date') else date_from
+            pos_date_to   = date_to.date()   if hasattr(date_to,   'date') else date_to
+
+        # ── QR-сканирования ──
+        qr_scans_today = 0
+        try:
+            from apps.tenant.branch.models import ClientBranchVisit
+            qr_visits_filter = Q(visited_at__gte=date_from) if date_from else Q()
+            if branch_id:
+                qr_visits_filter &= Q(client__branch_id=branch_id)
+            qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
+        except Exception as exc:
+            logger.error("QR scans count error: %s", exc)
+
+        # ── POS данные по филиалам ──
+        pos_guests_today = 0
+        guests_by_branch = {}
+
+        if branch_id:
+            branches = Branch.objects.filter(id=branch_id)
+        else:
+            branches = Branch.objects.all()
+
+        for branch_obj in branches:
+            branch_guests = 0
+            source_type   = None
+
+            if getattr(branch_obj, 'iiko_organization_id', None) and \
+                    branch_obj.iiko_organization_id.strip():
+                try:
+                    iiko_service = IIKOService()
+                    olap_result  = iiko_service.get_olap_guests_count(
+                        date_from=pos_date_from,
+                        date_to=pos_date_to,
+                        department=branch_obj.iiko_organization_id,
+                    )
+                    branch_guests = sum(olap_result.values())
+                    logger.debug(
+                        "IIKO branch %s: olap_result=%s → branch_guests=%s",
+                        branch_obj.id, olap_result, branch_guests,
+                    )
+                    source_type = 'IIKO'
+                except Exception as exc:
+                    logger.warning("IIKO error for branch %s: %s", branch_obj.id, exc)
+
+            elif getattr(branch_obj, 'dooglas_sale_point_id', None):
+                try:
+                    dooglys_service = DooglysService()
+                    branch_guests   = dooglys_service.get_guests_for_period(
+                        date_from=pos_date_from,
+                        date_to=pos_date_to,
+                        branch=branch_obj,
+                    )
+                    logger.debug(
+                        "Dooglys branch %s (dooglys_id=%s): guests=%s",
+                        branch_obj.id, branch_obj.dooglas_sale_point_id, branch_guests,
+                    )
+                    source_type = 'Dooglys'
+                except Exception as exc:
+                    logger.warning("Dooglys error for branch %s: %s", branch_obj.id, exc)
+
+            if branch_guests > 0 or source_type:
+                guests_by_branch[branch_obj.id] = {
+                    'name':   branch_obj.name,
+                    'count':  branch_guests,
+                    'source': source_type,
+                }
+
+            pos_guests_today += branch_guests
+
+        scan_index = 0.0
+        if pos_guests_today > 0 and qr_scans_today > 0:
+            scan_index = round((qr_scans_today / pos_guests_today) * 100, 2)
+
+        return {
+            'qr_scans_today':        qr_scans_today,
+            'pos_guests_today':      pos_guests_today,
+            'iiko_guests_today':     pos_guests_today,
+            'pos_guests_by_branch':  guests_by_branch,
+            'iiko_guests_by_branch': guests_by_branch,
+            'scan_index':            scan_index,
+            'pos_date_from':         pos_date_from,
+            'pos_date_to':           pos_date_to,
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     @classmethod
     def get_dashboard_stats(cls, period_code: str = None, branch_id: int = None,
-                            date_from=None, date_to=None):
+                            date_from=None, date_to=None, skip_pos: bool = False):
         """
         Собирает статистику за указанный период и филиал.
 
-        :param period_code: ключ из PERIOD_CHOICES ('today', '7d', …, 'all')
-        :param branch_id: ID филиала для фильтрации (опционально)
-        :param date_from: явная дата начала (для кастомного периода из UI)
-        :param date_to: явная дата конца (для кастомного периода из UI)
-        
-        Если для выбранного филиала задана stats_reset_date — дата начала периода
-        не может быть раньше даты обнуления.
+        :param skip_pos: Если True — пропускает запросы к IIKO/Dooglys.
+                         Используется для быстрого рендера страницы;
+                         POS-данные подгружаются потом через AJAX.
         """
         if date_from is not None and date_to is not None:
             period_code = period_code or 'custom'
@@ -138,7 +218,6 @@ class GeneralStatsService:
                 period_code or cls.DEFAULT_PERIOD
             )
 
-        # Уважаем stats_reset_date: сдвигаем date_from если нужно
         if branch_id:
             try:
                 from apps.tenant.stats.models import RFSettings
@@ -150,29 +229,23 @@ class GeneralStatsService:
             except Exception:
                 pass
 
-
         base_qs = ClientBranch.objects.all()
         
-        # Фильтрация по филиалу
         if branch_id:
             base_qs = base_qs.filter(branch_id=branch_id)
 
-        # ── Фильтр по периоду (created_at) ──
         period_qs = base_qs
         if date_from:
             period_qs = base_qs.filter(created_at__gte=date_from)
 
-        # ── Базовые подсчёты ──
-        total_clients = base_qs.values("client").distinct().count()                # всегда «все»
-        total_clients_period = period_qs.values("client").distinct().count()        # за период
+        total_clients = base_qs.values("client").distinct().count()
+        total_clients_period = period_qs.values("client").distinct().count()
 
-        # FIX: использован period_qs вместо глобального ClientBranch.objects
         super_prize_new = period_qs.filter(
             is_joined_community=True,
             superprizes__acquired_from='GAME'
         ).distinct().count()
 
-        # Вернулись второй раз
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
@@ -184,22 +257,17 @@ class GeneralStatsService:
             cnt=Count("id")
         ).filter(cnt__gte=2).count()
 
-        # Купили подарки
         expense_filter = Q(transactions__type="EXPENSE")
         if date_from:
             expense_filter &= Q(transactions__created_at__gte=date_from)
         bought_prizes = base_qs.filter(expense_filter).values("client").distinct().count()
 
-        # Выложили сторис
         posted_story = period_qs.filter(is_story_uploaded=True).values("client").distinct().count()
 
-        # Рефералы
         referral = period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
 
-        # Staff Engagement Index
         staff_index = cls.get_staff_engagement_index(date_from, date_to)
 
-        # ── Метрики рассылок ──
         msg_filters = Q(status='sent')
         if date_from:
             msg_filters &= Q(sent_at__gte=date_from)
@@ -209,7 +277,6 @@ class GeneralStatsService:
             campaign__title__icontains="День Рождения",
         ).count()
 
-        # Activated Birthday Prizes
         try:
             from apps.tenant.inventory.models import SuperPrize
             bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
@@ -220,14 +287,10 @@ class GeneralStatsService:
             logger.warning("Could not fetch birthday prizes: %s", e)
             activated_birthday_prizes = 0
 
-        # Open Rate
         total_sent = MessageLog.objects.filter(msg_filters).count()
         total_read = MessageLog.objects.filter(msg_filters, is_read=True).count()
         open_rate = int((total_read / total_sent * 100)) if total_sent > 0 else 0
 
-        # ── VK подписчики ──
-        # group_subscribers — количество клиентов, вступивших в сообщество (is_joined_community=True)
-        # mailing_subscribers — из VK Senler API (не зависит от периода)
         community_qs = ClientBranch.objects.filter(is_joined_community=True)
         if branch_id:
             community_qs = community_qs.filter(branch_id=branch_id)
@@ -242,102 +305,27 @@ class GeneralStatsService:
             logger.warning("VK service error: %s", e)
 
         # ── Данные о гостях из POS систем (IIKO / Dooglys) ──
-        # Для периода "сегодня" (days=0) берём данные за текущие сутки.
-        # Для остальных периодов используем тот же диапазон date_from / date_to.
+        # Загружаются асинхронно через AJAX (/analytics/api/v1/pos-stats/)
+        # чтобы не блокировать рендер страницы.
         qr_scans_today = 0
         pos_guests_today = 0
         scan_index = 0.0
-        guests_by_branch = {}  # Детализация по филиалам
+        guests_by_branch = {}
 
-        try:
-            from apps.tenant.branch.models import ClientBranchVisit
-            from datetime import date as _date
-
-            # ── Определяем даты для POS-запросов ──
-            if period_code == 'today' or date_from is None:
-                # «Сегодня» — текущие сутки
-                pos_date_from = _date.today()
-                pos_date_to   = _date.today()
-            else:
-                pos_date_from = date_from.date() if hasattr(date_from, 'date') else date_from
-                pos_date_to   = date_to.date()   if hasattr(date_to,   'date') else date_to
-
-            # ── QR-сканирования за период с учётом фильтра по филиалу ──
-            qr_visits_filter = Q(visited_at__gte=date_from) if date_from else Q()
-            if branch_id:
-                qr_visits_filter &= Q(client__branch_id=branch_id)
-
-            qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
-
-            # ── Получение данных о гостях из POS систем ──
-            if branch_id:
-                branches = Branch.objects.filter(id=branch_id)
-            else:
-                branches = Branch.objects.all()
-
-            for branch_obj in branches:
-                branch_guests = 0
-                source_type   = None
-
-                if getattr(branch_obj, 'iiko_organization_id', None) and \
-                        branch_obj.iiko_organization_id.strip():
-                    # IIKO: поддерживает фильтрацию по датам в OLAP.
-                    # get_olap_guests_count уже отфильтровал по department,
-                    # поэтому используем sum(values()) вместо .get(key, 0),
-                    # чтобы не зависеть от точного совпадения ключа словаря
-                    # (IIKO OLAP возвращает Department как строку-имя, а не ID).
-                    try:
-                        iiko_service = IIKOService()
-                        olap_result = iiko_service.get_olap_guests_count(
-                            date_from=pos_date_from,
-                            date_to=pos_date_to,
-                            department=branch_obj.iiko_organization_id,
-                        )
-                        # sum() безопасен: если результат пустой — вернёт 0
-                        branch_guests = sum(olap_result.values())
-                        logger.debug(
-                            "IIKO branch %s: olap_result=%s → branch_guests=%s",
-                            branch_obj.id, olap_result, branch_guests,
-                        )
-                        source_type = 'IIKO'
-                    except Exception as exc:
-                        logger.warning("IIKO error for branch %s: %s", branch_obj.id, exc)
-
-                elif getattr(branch_obj, 'dooglas_sale_point_id', None):
-                    # Dooglys: /sales/order/list с Unix Timestamps, X-Pagination-Total-Count
-                    try:
-                        dooglys_service = DooglysService()
-                        branch_guests   = dooglys_service.get_guests_for_period(
-                            date_from=pos_date_from,
-                            date_to=pos_date_to,
-                            branch=branch_obj,
-                        )
-                        logger.debug(
-                            "Dooglys branch %s (dooglys_id=%s): guests=%s",
-                            branch_obj.id, branch_obj.dooglas_sale_point_id, branch_guests,
-                        )
-                        source_type = 'Dooglys'
-                    except Exception as exc:
-                        logger.warning("Dooglys error for branch %s: %s", branch_obj.id, exc)
-
-                # Сохраняем детализацию по филиалу
-                if branch_guests > 0 or source_type:
-                    guests_by_branch[branch_obj.id] = {
-                        'name':   branch_obj.name,
-                        'count':  branch_guests,
-                        'source': source_type,
-                    }
-
-                pos_guests_today += branch_guests
-
-            # ── Индекс сканирования (QR / POS × 100 %) ──
-            if pos_guests_today > 0 and qr_scans_today > 0:
-                scan_index = round((qr_scans_today / pos_guests_today) * 100, 2)
-            else:
-                scan_index = 0.0
-
-        except Exception as exc:
-            logger.error("POS systems integration error: %s", exc)
+        if not skip_pos:
+            try:
+                pos_data = cls.get_pos_stats(
+                    period_code=period_code,
+                    branch_id=branch_id,
+                    date_from=date_from,
+                    date_to=date_to,
+                )
+                qr_scans_today   = pos_data['qr_scans_today']
+                pos_guests_today = pos_data['pos_guests_today']
+                scan_index       = pos_data['scan_index']
+                guests_by_branch = pos_data['pos_guests_by_branch']
+            except Exception as exc:
+                logger.error("POS systems integration error: %s", exc)
 
         # ── Задания (Квесты) ──
         quests_completed = 0
@@ -394,7 +382,6 @@ class GeneralStatsService:
         return {
             "total_clients": total_clients,
             "total_clients_period": total_clients_period,
-            # Обратная совместимость (шаблон detail ожидает old key)
             "total_clients_last_month": total_clients_period,
             "new_clients_received_super_prize": super_prize_new,
             "clients_returned_second_time": clients_returned,
@@ -427,10 +414,6 @@ class RFAnalyticsService:
 
     @staticmethod
     def get_matrix_data(branch):
-        """
-        Подготавливает данные для RF-матрицы на основе последнего Snapshot.
-        """
-        # 1. Получаем последний снэпшот
         last_snap = BranchSegmentSnapshot.objects.filter(branch=branch).order_by('-date').first()
         if not last_snap:
             return {
@@ -445,11 +428,9 @@ class RFAnalyticsService:
             date=last_snap.date
         ).select_related('segment')
 
-        # 2. Формируем список сегментов с количеством
         segments_data = []
         total_guests = 0
         
-        # Счетчики KPI
         vip_count = 0
         at_risk_count = 0
         lost_count = 0
@@ -460,7 +441,6 @@ class RFAnalyticsService:
             total_guests += snap.guests_count
             segments_data.append(seg)
 
-            # KPI logic based on codes
             if seg.code.endswith('F3'):
                 vip_count += snap.guests_count
             if seg.code.startswith('R1'):
@@ -468,7 +448,6 @@ class RFAnalyticsService:
             if seg.code.startswith('R0'):
                 lost_count += snap.guests_count
 
-        # 3. Сортировка сегментов
         def safe_sort_key(seg):
             try:
                 r_part = seg.code.split('F')[0].replace('R', '')
@@ -492,7 +471,6 @@ class RFAnalyticsService:
 
     @staticmethod
     def get_segment_ranges(segments):
-        """Извлекает примеры сегментов для заголовков таблицы (F1, F2... R1, R2...)"""
         ranges = {
             'f1': next((s for s in segments if s.code.endswith('F1')), None),
             'f2': next((s for s in segments if s.code.endswith('F2')), None),
@@ -516,7 +494,6 @@ class RFCalculator:
         
         period_start = today_dt - timezone.timedelta(days=self.settings.analysis_period)
 
-        # Если задана дата обнуления — используем более позднюю из двух дат
         if self.settings.stats_reset_date:
             period_start = max(period_start, self.settings.stats_reset_date)
         
@@ -525,7 +502,6 @@ class RFCalculator:
             attempt_count=Count('game_attempts', filter=Q(game_attempts__created_at__gte=period_start))
         )
         
-        # Pre-fetch existing scores to memory
         existing_scores = {
             gs.client_id: gs 
             for gs in GuestRFScore.objects.filter(client__branch=self.branch)
@@ -578,7 +554,6 @@ class RFCalculator:
                 if is_changed:
                     to_update.append(score)
 
-        # Bulk Operations
         if to_create:
             GuestRFScore.objects.bulk_create(to_create, batch_size=500)
             
@@ -595,7 +570,6 @@ class RFCalculator:
         self._update_segment_snapshot(today_date)
 
     def _update_segment_snapshot(self, snapshot_date):
-        """Создаёт/обновляет BranchSegmentSnapshot на основе текущих GuestRFScore"""
         score_counts = (
             GuestRFScore.objects
             .filter(client__branch=self.branch, segment__isnull=False)
@@ -615,7 +589,6 @@ class RFCalculator:
             )
 
     def find_segment_by_ranges(self, days, count):
-        """Ищет сегмент на основе числовых диапазонов в БД"""
         for seg in self.segments:
             if (seg.recency_min <= days <= seg.recency_max) and \
                (seg.frequency_min <= count <= seg.frequency_max):

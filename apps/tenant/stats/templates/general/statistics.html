@@ -268,8 +268,6 @@
         color: #fff;
     }
 
-    /* ─── (POS table styles removed — table moved to metrics) ─── */
-
     /* ─── Reviews Panel ─── */
     .reviews-panel {
         background: #ffffff;
@@ -352,6 +350,17 @@
     .sentiment-spam .sentiment-label { color: #6c757d; }
     .sentiment-spam .sentiment-count { color: #6c757d; }
     .sentiment-spam:hover { background: #f5f5f5; }
+
+    /* ─── POS Loading Spinner ─── */
+    .pos-loading {
+        font-size: 1rem;
+        color: #ccc;
+        animation: pos-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pos-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.2; }
+    }
 </style>
 {% endblock %}
 
@@ -468,15 +477,15 @@
         </div>
     </div>
 
-    {# ══ КАРТОЧКИ СТАТИСТИКИ — по схеме (14 карточек) ══ #}
+    {# ══ КАРТОЧКИ СТАТИСТИКИ ══ #}
     <div class="dashboard-grid">
 
-        {# ── РЯД 1 ── #}
-
-        {# 1. QR-сканирований за период #}
+        {# 1. QR-сканирований за период — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='qr_scans' %}?{{ period_params }}" class="stat-card">
             <h3>📱 Отсканировали QR-код за период</h3>
-            <div class="metric">{{ stats.qr_scans_today|floatformat:0|default:0 }}</div>
+            <div class="metric" id="qr-scans-metric">
+                <span class="pos-loading">⏳</span>
+            </div>
             <small class="text-muted">
                 {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}
                 {% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}
@@ -507,8 +516,6 @@
             <h3>💰 Купили подарки за баллы за период</h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
-
-        {# ── РЯД 2 ── #}
 
         {# 6. Подписались в сообщество ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='group_subscribers' %}?{{ period_params }}" class="stat-card">
@@ -543,8 +550,6 @@
             <small class="text-muted">Прочитано / Доставлено</small>
         </a>
 
-        {# ── РЯД 3 ── #}
-
         {# 11. Опубликовали историй в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{{ period_params }}" class="stat-card">
             <h3>📖 Опубликовали историй в ВК за период</h3>
@@ -557,17 +562,21 @@
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
 
-        {# 13. Гостей по POS-системе #}
+        {# 13. Гостей по POS-системе — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='pos_guests' %}?{{ period_params }}" class="stat-card">
             <h3>👥 Гостей по POS-системе за период</h3>
-            <div class="metric">{{ stats.pos_guests_today|floatformat:0|default:0 }}</div>
+            <div class="metric" id="pos-guests-metric">
+                <span class="pos-loading">⏳</span>
+            </div>
             <small class="text-muted">IIKO / Dooglys · {% if custom_date_from and custom_date_to %}{{ custom_date_from }} — {{ custom_date_to }}{% else %}{% for code, meta in period_choices.items %}{% if code == period_code %}{{ meta.0 }}{% endif %}{% endfor %}{% endif %}</small>
         </a>
 
-        {# 14. Индекс сканирования #}
+        {# 14. Индекс сканирования — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='scan_index' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
             <h3>🔄 Индекс сканирования за период</h3>
-            <div class="metric" style="color: #6f42c1;">{{ stats.scan_index|floatformat:0|default:0 }}%</div>
+            <div class="metric" style="color: #6f42c1;" id="scan-index-metric">
+                <span class="pos-loading">⏳</span>
+            </div>
             <small class="text-muted">QR-сканирования ÷ Гости POS-системы</small>
         </a>
 
@@ -725,4 +734,39 @@
     document.getElementById('custom_date_from').addEventListener('keypress', e => { if (e.key==='Enter') applyCustomPeriod(); });
     document.getElementById('custom_date_to').addEventListener('keypress', e => { if (e.key==='Enter') applyCustomPeriod(); });
 </script>
+
+{# ── Асинхронная загрузка POS-данных (IIKO / Dooglys) ── #}
+{# Страница рендерится мгновенно, эти 3 карточки подгружаются в фоне #}
+<script>
+(function loadPOSStats() {
+    var params = new URLSearchParams(window.location.search);
+    var apiUrl = '/analytics/api/v1/pos-stats/?' + params.toString();
+
+    fetch(apiUrl, { credentials: 'same-origin' })
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) {
+            var qrEl   = document.getElementById('qr-scans-metric');
+            var posEl  = document.getElementById('pos-guests-metric');
+            var scanEl = document.getElementById('scan-index-metric');
+
+            if (qrEl)   qrEl.textContent  = (data.qr_scans_today   || 0);
+            if (posEl)  posEl.textContent  = (data.pos_guests_today || 0);
+            if (scanEl) scanEl.textContent = parseFloat(data.scan_index || 0).toFixed(0) + '%';
+        })
+        .catch(function(err) {
+            console.warn('POS stats load failed:', err);
+            var dash = '<span style="color:#aaa;font-size:1.2rem">—</span>';
+            var qrEl   = document.getElementById('qr-scans-metric');
+            var posEl  = document.getElementById('pos-guests-metric');
+            var scanEl = document.getElementById('scan-index-metric');
+            if (qrEl)   qrEl.innerHTML   = dash;
+            if (posEl)  posEl.innerHTML  = dash;
+            if (scanEl) scanEl.innerHTML = dash;
+        });
+})();
+</script>
+
 {% endblock %}
