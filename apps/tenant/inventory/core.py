@@ -301,7 +301,6 @@ class InventoryService:
         product = Product.objects.filter(
             id=product_id,
             is_birthday_prize=True,
-            is_active=True,
             branch=client_profile.branch,
         ).first()
         if not product:
