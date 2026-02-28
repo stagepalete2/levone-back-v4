@@ -29,7 +29,8 @@ class BaseAdminStatsView(LoginRequiredMixin, UserPassesTestMixin):
     redirect_field_name = 'next'
 
     def test_func(self):
-        return self.request.user.is_superuser or self.request.user.is_staff
+        user = self.request.user
+        return user.is_superuser or user.has_perm('users.can_view_stats')
 
     def handle_no_permission(self):
         raise PermissionDenied("Доступ к статистике запрещен")
