@@ -180,9 +180,13 @@ class EmployeeRequestSerializer(serializers.Serializer):
 
 
 class EmployeeResponseSerializer(serializers.ModelSerializer):
+    vk_user_id = serializers.IntegerField(source='client.vk_user_id')
+    name = serializers.CharField(source='client.name')
+    lastname = serializers.CharField(source='client.lastname')
+    sex = serializers.IntegerField(source='client.sex')
 
     class Meta:
-        model = Client
+        model = ClientBranch
         fields = ['vk_user_id', 'name', 'lastname', 'sex']
 
 
