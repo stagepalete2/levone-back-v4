@@ -11,8 +11,21 @@ class User(AbstractUser):
         null=True, 
         blank=True,
         related_name='users',
-        verbose_name='Клиент'
+        verbose_name='Основной тенант'
+    )
+
+    companies = models.ManyToManyField(
+        Company,
+        blank=True,
+        related_name='staff_users',
+        verbose_name='Доступные тенанты',
+        help_text='Пользователь может логиниться и управлять всеми отмеченными тенантами'
     )
 
     def __str__(self):
         return f"{self.username} ({self.company.name if self.company else 'Глобальный'})"
+
+    class Meta:
+        permissions = [
+            ('can_view_stats', 'Может просматривать статистику'),
+        ]
