@@ -13,18 +13,17 @@ logger = logging.getLogger(__name__)
 
 @shared_task()
 def generate_daily_code_for_all_tenants():
-    """Запускает генерацию кодов для каждого тенанта отдельно"""
-    # Получаем модель тенанта динамически внутри задачи, чтобы избежать проблем при импорте
     TenantModel = get_tenant_model()
     
-    # Исключаем public и берем ID
-    tenants = TenantModel.objects.exclude(schema_name='public').values_list('pk', flat=True)
+    tenant_ids = list(  # Материализуем сразу, чтобы избежать проблем с QuerySet
+        TenantModel.objects.exclude(schema_name='public')
+                           .values_list('pk', flat=True)
+    )
     
-    logger.info(f"Starting daily code generation for {len(tenants)} tenants.")
+    logger.info(f"Starting daily code generation for {len(tenant_ids)} tenants.")
     
-    for tenant_id in tenants:
-        # Приводим к строке для безопасности сериализации (если используете UUID)
-        process_tenant_daily_codes.delay(str(tenant_id))
+    for tenant_id in tenant_ids:
+        process_tenant_daily_codes.delay(tenant_id) 
 
 @shared_task()
 def daily_rfm_update():
