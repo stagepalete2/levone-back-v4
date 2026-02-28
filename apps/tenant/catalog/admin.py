@@ -61,6 +61,43 @@ class ProductAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
         ]
         return custom_urls + urls
 
+    # ── При добавлении: после сохранения дублируем в выбранные рестораны ─────
+
+    def response_add(self, request, obj, post_url_continue=None):
+        extra_branch_ids = request.POST.getlist('extra_branch_ids')
+        if extra_branch_ids:
+            created, skipped = 0, 0
+            from apps.tenant.branch.models import Branch
+            for branch in Branch.objects.filter(pk__in=extra_branch_ids).exclude(pk=obj.branch_id):
+                result = _copy_product_to_branch(obj, branch)
+                if result == 'created':
+                    created += 1
+                else:
+                    skipped += 1
+            if created:
+                self.message_user(
+                    request,
+                    f'«{obj.name}» также добавлен в {created} ресторан(ов).'
+                    + (f' Пропущено (уже есть): {skipped}.' if skipped else ''),
+                    messages.INFO,
+                )
+        return super().response_add(request, obj, post_url_continue)
+
+    def add_view(self, request, form_url='', extra_context=None):
+        from apps.tenant.branch.models import Branch
+        extra_context = extra_context or {}
+
+        # Получаем доступные для пользователя бранчи (соблюдаем права)
+        user = request.user
+        user_branches = self._get_user_branches(user)
+        if user_branches is not None:
+            all_branches = user_branches
+        else:
+            all_branches = Branch.objects.all()
+
+        extra_context['all_branches_for_add'] = all_branches
+        return super().add_view(request, form_url, extra_context=extra_context)
+
     # ── Кнопка «Дублировать» на форме редактирования продукта ────────────────
 
     def change_view(self, request, object_id, form_url='', extra_context=None):

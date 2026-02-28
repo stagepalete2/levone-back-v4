@@ -1,6 +1,88 @@
 {% extends "admin/change_form.html" %}
 {% load i18n %}
 
+{% block after_field_sets %}
+    {{ block.super }}
+
+    {# ── Мультивыбор ресторанов при ДОБАВЛЕНИИ нового приза ── #}
+    {% if not original and all_branches_for_add %}
+    <fieldset class="module aligned">
+        <h2 style="padding: 8px 12px; margin: 0; background: var(--darkened-bg); border-bottom: 1px solid var(--border-color);">
+            📋 Также добавить в рестораны
+        </h2>
+        <div style="padding: 12px 16px;">
+            <p style="margin: 0 0 10px; color: var(--body-quiet-color); font-size: 13px;">
+                Приз будет создан для ресторана, выбранного в поле «Ресторан» выше.
+                Дополнительно отметьте рестораны — и копии будут созданы автоматически.
+            </p>
+
+            <div style="margin-bottom: 10px; display: flex; gap: 8px;">
+                <button type="button" onclick="toggleExtraBranches(true)"
+                    style="padding: 4px 12px; border: 1px solid var(--border-color); border-radius: 3px;
+                           background: #417690; color: #fff; cursor: pointer; font-size: 12px;">
+                    ✅ Выбрать все
+                </button>
+                <button type="button" onclick="toggleExtraBranches(false)"
+                    style="padding: 4px 12px; border: 1px solid var(--border-color); border-radius: 3px;
+                           background: transparent; color: var(--body-fg); cursor: pointer; font-size: 12px;">
+                    ✖ Снять все
+                </button>
+            </div>
+
+            <ul style="margin: 0; padding: 0; list-style: none; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
+                {% for branch in all_branches_for_add %}
+                <li style="padding: 8px 14px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
+                    <input
+                        type="checkbox"
+                        name="extra_branch_ids"
+                        value="{{ branch.pk }}"
+                        id="extra_branch_{{ branch.pk }}"
+                        class="extra-branch-checkbox"
+                        style="width: 16px; height: 16px; cursor: pointer;"
+                    >
+                    <label for="extra_branch_{{ branch.pk }}" style="cursor: pointer; margin: 0; flex: 1;">
+                        {{ branch.name }}
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </fieldset>
+
+    <script>
+    function toggleExtraBranches(check) {
+        document.querySelectorAll('.extra-branch-checkbox').forEach(function(cb) {
+            cb.checked = check;
+        });
+    }
+
+    // Автоматически отключаем галочку ресторана, выбранного в поле «Ресторан»
+    document.addEventListener('DOMContentLoaded', function() {
+        var branchSelect = document.getElementById('id_branch');
+        if (!branchSelect) return;
+
+        function syncBranchCheckbox() {
+            var selectedVal = branchSelect.value;
+            document.querySelectorAll('.extra-branch-checkbox').forEach(function(cb) {
+                var li = cb.closest('li');
+                if (cb.value === selectedVal) {
+                    cb.checked = false;
+                    cb.disabled = true;
+                    li.style.opacity = '0.4';
+                } else {
+                    cb.disabled = false;
+                    li.style.opacity = '';
+                }
+            });
+        }
+
+        branchSelect.addEventListener('change', syncBranchCheckbox);
+        syncBranchCheckbox();
+    });
+    </script>
+    {% endif %}
+{% endblock %}
+
 {% block submit_buttons_bottom %}
     {{ block.super }}
     {% if show_duplicate_btn and original %}
