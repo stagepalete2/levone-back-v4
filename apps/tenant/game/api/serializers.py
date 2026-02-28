@@ -44,7 +44,7 @@ class SuperPrizeSerializer(serializers.ModelSerializer):
     
     def get_prizes(self, instance):
         prizes = Product.objects.filter(branch=instance.client.branch, is_super_prize=True).order_by('-created_at')[:4]
-        serializer = CatalogResponseSerializer(prizes, many=True)
+        serializer = CatalogResponseSerializer(prizes, many=True, context=self.context)
         return serializer.data
 
 
