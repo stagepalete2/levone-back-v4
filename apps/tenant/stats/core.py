@@ -299,13 +299,13 @@ class GeneralStatsService:
         community_qs = ClientBranch.objects.filter(is_joined_community=True)
         if branch_id:
             community_qs = community_qs.filter(branch_id=branch_id)
-        group_subscribers = community_qs.count()
+        group_subscribers = period_qs.filter(is_joined_community=True).distinct().count()
 
         mailing_subscribers = 0
         try:
             from apps.tenant.senler.services import VKService
             vk_service = VKService()
-            mailing_subscribers = vk_service.get_mailing_subscribers_count()
+            mailing_subscribers = period_qs.filter(is_joined_community=True).distinct().count()
         except Exception as e:
             logger.warning("VK service error: %s", e)
 

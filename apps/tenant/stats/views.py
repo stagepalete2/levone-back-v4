@@ -136,8 +136,8 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
-        qs = ClientBranch.objects.all()
-
+        
+        qs = ClientBranch.objects.filter(invited_by__isnull=True)
         if branch_ctx.get('selected_branch_id'):
             qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
 
