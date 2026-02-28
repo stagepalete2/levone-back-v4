@@ -22,6 +22,7 @@
                                     <th class="ps-4 border-0">Ресторан</th>
                                     <th class="border-0">Код дня игры</th>
                                     <th class="border-0">код дня к заданию</th>
+                                    <th class="border-0">код дня ко дню рождения</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -36,6 +37,11 @@
                                     <td>
                                         <span class="badge font-monospace fs-6" style="border: 1px solid var(--border-color); color: var(--body-fg);">
                                             {{ item.quest_code|default:"Не сгенерирован" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge font-monospace fs-6" style="border: 1px solid var(--border-color); color: var(--body-fg);">
+                                            {{ item.birthday_code|default:"Не сгенерирован" }}
                                         </span>
                                     </td>
                                 </tr>

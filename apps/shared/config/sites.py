@@ -51,15 +51,12 @@ class TenantAdminSite(admin.AdminSite):
         if not user.is_active or not user.is_staff:
             return False
 
-        # Глобальный суперюзер платформы (без привязки к компании) — может заходить везде
         if user.is_superuser and not user.company_id:
             return True
 
-        # Пользователь должен быть привязан к компании
         if not user.company_id:
             return False
 
-        # Обычный админ компании может заходить ТОЛЬКО в свой тенант
         if user.company_id != request.tenant.id:
             return False
 
@@ -70,27 +67,28 @@ class TenantAdminSite(admin.AdminSite):
     
         if getattr(request.tenant, 'schema_name', None) == 'public':
             return super().index(request, extra_context=extra_context)
-        # We import here to avoid circular imports
+        
         from apps.tenant.branch.models import Branch
         from apps.tenant.game.models import DailyCode as GameDailyCodes
         from apps.tenant.quest.models import DailyCode as QuestDailyCodes
+        from apps.tenant.branch.models import DailyCode as BirthdayDailyCodes
         
         extra_context = extra_context or {}
         today = timezone.localdate()
         branch_codes = []
 
-        # No tenant_context loop needed! 
-        # Django is already connected to the specific tenant's schema.
         branches = Branch.objects.all()
         
         for branch in branches:
             game_code = GameDailyCodes.objects.filter(date=today, branch=branch).first()
             quest_code = QuestDailyCodes.objects.filter(date=today, branch=branch).first()
+            birthday_code = BirthdayDailyCodes.objects.filter(date=today, branch=branch).first()
 
             branch_codes.append({
                 "branch": branch.name,
                 "game_code": game_code.code if game_code else "Не сгенерирован",
                 "quest_code": quest_code.code if quest_code else "Не сгенерирован",
+                "birthday_code" : birthday_code.code if birthday_code else 'Не сгенерирован',
             })
         
         extra_context['today'] = today
