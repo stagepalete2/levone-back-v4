@@ -117,11 +117,13 @@ class GeneralStatsService:
             pos_date_from = date_from.date() if hasattr(date_from, 'date') else date_from
             pos_date_to   = date_to.date()   if hasattr(date_to,   'date') else date_to
 
-        # ── QR-сканирования ──
+        # ── QR-сканирования (исключаем реферальных — у них отдельная метрика) ──
         qr_scans_today = 0
         try:
             from apps.tenant.branch.models import ClientBranchVisit
-            qr_visits_filter = Q(visited_at__gte=date_from) if date_from else Q()
+            qr_visits_filter = Q(client__invited_by__isnull=True)
+            if date_from:
+                qr_visits_filter &= Q(visited_at__gte=date_from)
             if branch_id:
                 qr_visits_filter &= Q(client__branch_id=branch_id)
             qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
@@ -229,10 +231,18 @@ class GeneralStatsService:
             except Exception:
                 pass
 
-        base_qs = ClientBranch.objects.all()
-        
+        # ── Все клиенты (включая реферальных из историй) — для подсчёта реферальной метрики
+        all_qs = ClientBranch.objects.all()
         if branch_id:
-            base_qs = base_qs.filter(branch_id=branch_id)
+            all_qs = all_qs.filter(branch_id=branch_id)
+
+        all_period_qs = all_qs
+        if date_from:
+            all_period_qs = all_qs.filter(created_at__gte=date_from)
+
+        # ── Основная выборка — БЕЗ реферальных (из историй).
+        # Клиенты с invited_by учитываются ТОЛЬКО в метрике «Перешли из историй».
+        base_qs = all_qs.filter(invited_by__isnull=True)
 
         period_qs = base_qs
         if date_from:
@@ -269,7 +279,7 @@ class GeneralStatsService:
 
         posted_story = period_qs.filter(is_story_uploaded=True).values("client").distinct().count()
 
-        referral = period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
+        referral = all_period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
 
         staff_index = cls.get_staff_engagement_index(date_from, date_to)
 
