@@ -240,11 +240,16 @@ class GeneralStatsService:
 
         total_clients = base_qs.values("client").distinct().count()
         total_clients_period = period_qs.values("client").distinct().count()
-
-        super_prize_new = period_qs.filter(
-            is_joined_community=True,
-            superprizes__acquired_from='GAME'
-        ).distinct().count()
+        from apps.tenant.inventory.models import SuperPrize as _SP
+        _sp_filters = Q(acquired_from='GAME')
+        if date_from:
+            _sp_filters &= Q(created_at__gte=date_from)
+        if date_to:
+            _sp_filters &= Q(created_at__lte=date_to)
+        if branch_id:
+            _sp_filters &= Q(client__branch_id=branch_id)
+        _sp_ids = _SP.objects.filter(_sp_filters).values_list('client_id', flat=True)
+        super_prize_new = base_qs.filter(id__in=_sp_ids, is_joined_community=True).distinct().count()
 
         attempt_filters = {}
         if date_from:
