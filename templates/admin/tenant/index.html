@@ -54,6 +54,7 @@
         </div>
 
         <div id="content-main" class="mb-4">
+            {% if can_view_stats %}
             <div class="card shadow-sm border-0" style="background-color: var(--darkened-bg); border: 1px solid var(--border-color) !important;">
                 <div class="card-header py-3" style="background-color: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color);">
                     <h5 class="card-title mb-0 fw-bold">
@@ -77,6 +78,7 @@
                     </a>
                 </div>
             </div>
+            {% endif %}
         </div>
     </div> 
 {% endblock %}
