@@ -105,6 +105,8 @@ class MessageLog(TimeStampedModel):
     
     campaign = models.ForeignKey(MailingCampaign, on_delete=models.CASCADE, null=True, blank=True, related_name='logs', verbose_name='Рассылка')
     client = models.ForeignKey(ClientBranch, on_delete=models.CASCADE, verbose_name='Гость')
+    template_type = models.CharField(max_length=30, blank=True, null=True, verbose_name='Тип шаблона',
+                                     help_text='Тип шаблона, если сообщение отправлено автоматически')
     sent_at = models.DateTimeField(auto_now_add=True, verbose_name='Время отправки')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, verbose_name='Статус')
     error_message = models.TextField(blank=True, null=True, verbose_name='Сообщение об ошибке')

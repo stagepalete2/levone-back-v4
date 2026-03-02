@@ -176,6 +176,7 @@ class ClientBranch(TimeStampedModel):
     birth_date = models.DateField(blank=True, null=True, verbose_name='Дата рождения')
 
     is_story_uploaded = models.BooleanField(default=False, verbose_name='Сторис опубликован')
+    story_uploaded_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата публикации сторис')
     is_joined_community = models.BooleanField(default=False, verbose_name='Вступил в сообщество')
     is_allowed_message = models.BooleanField(default=False, verbose_name='Разрешил отправку сообщений')
     is_super_prize_won = models.BooleanField(default=False, verbose_name='Выиграл суперприз')
