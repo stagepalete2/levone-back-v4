@@ -57,7 +57,6 @@ class Command(BaseCommand):
                 self._clear_test_data()
             
             # Создаём данные
-            self._create_message_templates()
             branch = self._get_or_create_branch()
             self._create_products(branch)
             self._create_quests(branch)

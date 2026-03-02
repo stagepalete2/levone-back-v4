@@ -137,18 +137,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
         
-        # ── Все клиенты (включая реферальных) для отдельных метрик
-        all_qs = ClientBranch.objects.all()
-        if branch_ctx.get('selected_branch_id'):
-            all_qs = all_qs.filter(branch_id=branch_ctx['selected_branch_id'])
-
-        if date_from and date_to:
-            all_period_qs = all_qs.filter(created_at__gte=date_from, created_at__lte=date_to)
-        elif date_from:
-            all_period_qs = all_qs.filter(created_at__gte=date_from)
-        else:
-            all_period_qs = all_qs
-
         qs = ClientBranch.objects.filter(invited_by__isnull=True)
         if branch_ctx.get('selected_branch_id'):
             qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
@@ -165,15 +153,15 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         title_map = {
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
             "mailing_subscribers": (
-                'Общее количество гостей, подписавшихся на рассылку через приложение',
+                'Подписались на рассылку ЧЕРЕЗ приложение',
                 qs.filter(allowed_message_via_app=True)
             ),
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
             "group_subscribers": (
-                'Подписались в сообщество ВК ЧЕРЕЗ приложение за период',
-                period_qs.filter(joined_community_via_app=True)
+                'Подписались в сообщество ВК ЧЕРЕЗ приложение',
+                qs.filter(joined_community_via_app=True)
             ),
             "mailing_period": (
                 'Подписались на рассылку ВК ЧЕРЕЗ приложение',
@@ -182,10 +170,13 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
             "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
-            "clients_posted_story": lambda: self._get_posted_story_clients(qs, date_from, date_to, branch_id),
+            "clients_posted_story": (
+                'Опубликовали историй в ВК',
+                period_qs.filter(is_story_uploaded=True)
+            ),
             "clients_from_referral": (
                 'Перешли из историй ВК',
-                all_period_qs.filter(invited_by__isnull=False)
+                period_qs.filter(invited_by__isnull=False)
             ),
         }
 
@@ -218,7 +209,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
-        from django.db.models.functions import TruncDate
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
@@ -226,56 +216,43 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             attempt_filters['created_at__lte'] = date_to
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
-        # Считаем «возврат» как игру в ДРУГОЙ календарный день (не просто 2+ попытки).
-        # Если гость сыграл 10 раз за один день — это один визит, не повторный.
         repeat_client_ids = ClientAttempt.objects.filter(
             **attempt_filters
-        ).annotate(
-            play_date=TruncDate('created_at')
-        ).values('client', 'play_date').distinct().values('client').annotate(
-            days_cnt=Count('play_date', distinct=True)
-        ).filter(days_cnt__gte=2).values_list('client', flat=True)
+        ).values('client').annotate(
+            attempt_count=Count('id')
+        ).filter(attempt_count__gte=2).values_list('client', flat=True)
         return ('Вернулись и сыграли в игру повторно', qs.filter(id__in=repeat_client_ids))
 
     @staticmethod
     def _get_birthday_clients(qs, date_from, date_to=None, branch_id=None):
-        from apps.tenant.inventory.models import SuperPrize
-        # Пришли отметить ДР = активировали подарок ко дню рождения (ввели код дня у персонала)
-        bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
+        filters = Q(
+            client__birth_date__isnull=False,
+            created_at__day=F('client__birth_date__day'),
+            created_at__month=F('client__birth_date__month'),
+        )
         if date_from:
-            bp_filters &= Q(activated_at__gte=date_from)
+            filters &= Q(created_at__gte=date_from)
         if date_to:
-            bp_filters &= Q(activated_at__lte=date_to)
+            filters &= Q(created_at__lte=date_to)
         if branch_id:
-            bp_filters &= Q(client__branch_id=branch_id)
-        client_ids = SuperPrize.objects.filter(bp_filters).values_list('client_id', flat=True).distinct()
-        return ('Пришли отметить день рождения', qs.filter(id__in=client_ids))
+            filters &= Q(client__branch_id=branch_id)
+        birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
+        return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
 
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.inventory.models import SuperPrize
-        from django.db.models import Min
-
-        # Дата ПЕРВОГО суперприза (GAME) для каждого клиента
-        first_prize_dates = SuperPrize.objects.filter(
-            acquired_from='GAME'
-        ).values('client_id').annotate(
-            first_prize_at=Min('created_at')
-        )
-
+        prize_filters = Q(acquired_from='GAME')
         if date_from:
-            first_prize_dates = first_prize_dates.filter(first_prize_at__gte=date_from)
+            prize_filters &= Q(created_at__gte=date_from)
         if date_to:
-            first_prize_dates = first_prize_dates.filter(first_prize_at__lte=date_to)
+            prize_filters &= Q(created_at__lte=date_to)
         if branch_id:
-            first_prize_dates = first_prize_dates.filter(client__branch_id=branch_id)
-
-        client_ids = first_prize_dates.values_list('client_id', flat=True)
+            prize_filters &= Q(client__branch_id=branch_id)
+        client_ids = SuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
         return (
             'Новые в группе и рассылке, получившие первый подарок',
-            qs.filter(id__in=client_ids).filter(
-                Q(joined_community_via_app=True) | Q(allowed_message_via_app=True)
-            )
+            qs.filter(id__in=client_ids, joined_community_via_app=True)
         )
 
     @staticmethod
@@ -293,11 +270,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.branch.models import ClientBranchVisit
-        visit_filters = Q(client__invited_by__isnull=True)
+        visit_filters = Q()
         if date_from:
-            visit_filters &= Q(visited_at__gte=date_from)
+            visit_filters &= Q(created_at__gte=date_from)
         if date_to:
-            visit_filters &= Q(visited_at__lte=date_to)
+            visit_filters &= Q(created_at__lte=date_to)
         if branch_id:
             visit_filters &= Q(client__branch_id=branch_id)
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
@@ -306,11 +283,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(status='sent', campaign__title__icontains="День Рождения")
+        log_filters = Q(campaign__title__icontains="День Рождения")
         if date_from:
-            log_filters &= Q(sent_at__gte=date_from)
+            log_filters &= Q(created_at__gte=date_from)
         if date_to:
-            log_filters &= Q(sent_at__lte=date_to)
+            log_filters &= Q(created_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
@@ -319,26 +296,15 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(status='sent', is_read=True)
+        log_filters = Q(is_read=True)
         if date_from:
-            log_filters &= Q(sent_at__gte=date_from)
+            log_filters &= Q(created_at__gte=date_from)
         if date_to:
-            log_filters &= Q(sent_at__lte=date_to)
+            log_filters &= Q(created_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
         return ('% открываемости сообщений в ВК', qs.filter(id__in=client_ids))
-
-    @staticmethod
-    def _get_posted_story_clients(qs, date_from, date_to=None, branch_id=None):
-        story_filter = Q(is_story_uploaded=True, story_uploaded_at__isnull=False)
-        if date_from:
-            story_filter &= Q(story_uploaded_at__gte=date_from)
-        if date_to:
-            story_filter &= Q(story_uploaded_at__lte=date_to)
-        if branch_id:
-            story_filter &= Q(branch_id=branch_id)
-        return ('Опубликовали историй в ВК', qs.filter(story_filter))
 
 
 class AwayView(LoginRequiredMixin, View):
@@ -377,7 +343,7 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
         ).order_by('-created_at')
 
         sentiment = self.request.GET.get('sentiment')
-        if sentiment in ('POSITIVE', 'NEGATIVE', 'PARTIALLY_NEGATIVE', 'NEUTRAL', 'SPAM'):
+        if sentiment in ('POSITIVE', 'NEGATIVE', 'NEUTRAL', 'SPAM'):
             reviews = all_reviews.filter(sentiment=sentiment)
         else:
             sentiment = None
@@ -403,7 +369,6 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
             'total_count': all_reviews.count(),
             'positive_count': all_reviews.filter(sentiment='POSITIVE').count(),
             'negative_count': all_reviews.filter(sentiment='NEGATIVE').count(),
-            'partially_negative_count': all_reviews.filter(sentiment='PARTIALLY_NEGATIVE').count(),
             'neutral_count': all_reviews.filter(sentiment='NEUTRAL').count(),
             'spam_count': all_reviews.filter(sentiment='SPAM').count(),
             'back_params': '&'.join(back_parts),
@@ -424,15 +389,21 @@ class ReviewReplyView(BaseAdminStatsView, View):
 
             review = BranchTestimonials.objects.get(id=review_id)
 
-            if not review.client:
-                return JsonResponse({'success': False, 'error': 'Клиент не привязан к отзыву'}, status=400)
-
             from apps.tenant.senler.services import VKService
             service = VKService()
             if not service.is_configured:
                 return JsonResponse({'success': False, 'error': 'VK не настроен'}, status=400)
 
-            service.send_message(review.client, text)
+            if review.client:
+                # Стандартный путь: отправляем через client_branch
+                service.send_message(review.client, text)
+            elif review.vk_sender_id:
+                # Клиент не зарегистрирован в приложении, но VK ID известен — 
+                # отправляем напрямую через VK API
+                service.send_message_by_vk_id(int(review.vk_sender_id), text)
+            else:
+                return JsonResponse({'success': False, 'error': 'Невозможно отправить: нет ни клиента, ни VK ID'}, status=400)
+
             review.is_replied = True
             review.save(update_fields=['is_replied'])
 
