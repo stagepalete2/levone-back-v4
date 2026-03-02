@@ -154,6 +154,7 @@ class ClientService:
 		# Сохраняем старые значения ДО обновления
 		old_joined = client_branch.is_joined_community
 		old_allowed = client_branch.is_allowed_message
+		old_story = client_branch.is_story_uploaded
 		old_invited_by = client_branch.invited_by_id
 
 		# Обновляем поля ClientBranch
@@ -163,17 +164,25 @@ class ClientService:
 				continue
 			setattr(client_branch, attr, value)
 		
-		# Отслеживаем реальную подписку через приложение:
-		# Если is_joined_community было False (пользователь НЕ был подписан при регистрации)
-		# и теперь ставится True — значит подписался ИМЕННО через наше приложение
+		# ── Синхронизация связанных флагов ──
+		# Когда is_joined_community переходит False → True (подписался через приложение):
+		# автоматически ставим все связанные флаги, чтобы метрики считались правильно.
 		new_joined = client_branch.is_joined_community
 		new_allowed = client_branch.is_allowed_message
+		new_story = client_branch.is_story_uploaded
 
 		if not old_joined and new_joined:
 			client_branch.joined_community_via_app = True
+			# Если вступил в сообщество — значит и рассылку разрешил
+			client_branch.is_allowed_message = True
+			client_branch.allowed_message_via_app = True
 		
 		if not old_allowed and new_allowed:
 			client_branch.allowed_message_via_app = True
+
+		# Когда is_story_uploaded переходит False → True — фиксируем время
+		if not old_story and new_story:
+			client_branch.story_uploaded_at = timezone.now()
 
 		client_branch.save()
 
