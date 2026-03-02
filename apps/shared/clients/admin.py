@@ -4,7 +4,7 @@ from django import forms
 from django.utils.safestring import mark_safe
 
 from apps.shared.config.sites import public_admin
-from apps.shared.clients.models import Company, CompanyConfig, Domain, KnowledgeBase
+from apps.shared.clients.models import Company, CompanyConfig, Domain, KnowledgeBase, UsedClientId
 
 
 class SubdomainWidget(forms.TextInput):
@@ -39,6 +39,43 @@ class SubdomainWidget(forms.TextInput):
                 return f"{clean_val}{self.BASE_DOMAIN}"
         return value
 
+
+class CompanyForm(forms.ModelForm):
+    class Meta:
+        model = Company
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            # Подсказка: следующий свободный ID
+            used_ids = set(UsedClientId.objects.values_list('client_id', flat=True))
+            current_ids = set(Company.objects.values_list('client_id', flat=True))
+            all_blocked = used_ids | current_ids
+            next_id = 0
+            while next_id in all_blocked:
+                next_id += 1
+            self.fields['client_id'].help_text = (
+                f'Следующий свободный ID: <strong>{next_id}</strong>. '
+                f'Заблокированные ID (удалённые): {sorted(used_ids - current_ids) or "нет"}. '
+                f'После удаления клиента его ID нельзя будет использовать повторно.'
+            )
+
+    def clean_client_id(self):
+        client_id = self.cleaned_data.get('client_id')
+        if client_id is not None:
+            # Проверяем, не заблокирован ли ID
+            existing_client_id = None
+            if self.instance.pk:
+                existing_client_id = Company.objects.filter(pk=self.instance.pk).values_list('client_id', flat=True).first()
+
+            if existing_client_id != client_id:
+                if UsedClientId.objects.filter(client_id=client_id).exists():
+                    raise forms.ValidationError(
+                        f'ID {client_id} уже был использован ранее и заблокирован. Выберите другой.'
+                    )
+        return client_id
+
 class DomainForm(forms.ModelForm):
     class Meta:
         model = Domain
@@ -65,7 +102,8 @@ class DomainInline(admin.TabularInline):
 
 @admin.register(Company, site=public_admin)
 class CompanyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'get_primary_domain', 'display_id', 'is_active', 'paid_until', 'go_to_admin_link', 'created_at')
+    form = CompanyForm
+    list_display = ('name', 'get_primary_domain', 'client_id', 'is_active', 'paid_until', 'go_to_admin_link', 'created_at')
     list_filter = ('is_active',)
     search_fields = ('name',)
     inlines = [DomainInline]
@@ -74,11 +112,6 @@ class CompanyAdmin(admin.ModelAdmin):
         domain = obj.get_primary_domain()
         return domain.domain if domain else '—'
     get_primary_domain.short_description = 'Домен'
-
-    def display_id(self, obj):
-        return obj.id - 1 if obj.id is not None else '-'
-    display_id.short_description = 'ID'
-    display_id.admin_order_field = 'id'
 
     def go_to_admin_link(self, obj):
         domain = obj.get_primary_domain()

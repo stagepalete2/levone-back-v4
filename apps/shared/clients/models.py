@@ -1,11 +1,32 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from django_tenants.models import TenantMixin, DomainMixin
 
 from apps.shared.config.models import TimeStampedModel
 
+
+class UsedClientId(models.Model):
+	"""Хранит все когда-либо использованные client_id, чтобы нельзя было повторно назначить удалённый ID."""
+	client_id = models.PositiveIntegerField(unique=True, verbose_name='Использованный ID')
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		verbose_name = 'Использованный ID клиента'
+		verbose_name_plural = 'Использованные ID клиентов'
+
+	def __str__(self):
+		return str(self.client_id)
+
+
 class Company(TenantMixin, TimeStampedModel):
 	name = models.CharField(max_length=100, verbose_name='Название')
 	description = models.TextField(verbose_name='Описание', blank=True, null=True, help_text='Для удобства')
+
+	client_id = models.PositiveIntegerField(
+		unique=True,
+		verbose_name='ID клиента',
+		help_text='Ручной ID клиента. После удаления этот номер нельзя будет использовать повторно.'
+	)
 
 	is_active = models.BooleanField(default=False, verbose_name='Статус', help_text='Активно/Неактивно')
 
@@ -14,6 +35,26 @@ class Company(TenantMixin, TimeStampedModel):
 	auto_create_schema = True
 
 	auto_drop_schema = True
+
+	def clean(self):
+		super().clean()
+		# Проверяем, не был ли этот client_id уже использован ранее (и удалён)
+		if self.client_id is not None:
+			used = UsedClientId.objects.filter(client_id=self.client_id)
+			# Если это существующий объект — разрешаем свой текущий ID
+			if self.pk:
+				existing = Company.objects.filter(pk=self.pk).values_list('client_id', flat=True).first()
+				if existing == self.client_id:
+					return
+			if used.exists():
+				raise ValidationError({
+					'client_id': f'ID {self.client_id} уже был использован ранее и заблокирован.'
+				})
+
+	def save(self, *args, **kwargs):
+		super().save(*args, **kwargs)
+		# Сохраняем client_id в таблицу использованных
+		UsedClientId.objects.get_or_create(client_id=self.client_id)
 
 	def __str__(self):
 		return self.name

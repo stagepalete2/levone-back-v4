@@ -123,7 +123,7 @@ class BranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
 
         company = _get_company_for_current_tenant()
         app_id = _get_vk_mini_app_id(company)
-        company_id = company.id - 1 if company else None
+        company_id = company.client_id if company else None
 
         if not app_id:
             return format_html(
@@ -487,11 +487,6 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                     try:
                         if review.client:
                             service.send_message(review.client, text)
-                            review.is_replied = True
-                            review.save(update_fields=['is_replied'])
-                            success_count += 1
-                        elif review.vk_sender_id:
-                            service.send_message_by_vk_id(int(review.vk_sender_id), text)
                             review.is_replied = True
                             review.save(update_fields=['is_replied'])
                             success_count += 1
