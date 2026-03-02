@@ -343,7 +343,7 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
         ).order_by('-created_at')
 
         sentiment = self.request.GET.get('sentiment')
-        if sentiment in ('POSITIVE', 'NEGATIVE', 'NEUTRAL', 'SPAM'):
+        if sentiment in ('POSITIVE', 'NEGATIVE', 'PARTIALLY_NEGATIVE', 'NEUTRAL', 'SPAM'):
             reviews = all_reviews.filter(sentiment=sentiment)
         else:
             sentiment = None
@@ -369,6 +369,7 @@ class ReviewsListView(PeriodMixin, BranchMixin, BaseAdminStatsView, TemplateView
             'total_count': all_reviews.count(),
             'positive_count': all_reviews.filter(sentiment='POSITIVE').count(),
             'negative_count': all_reviews.filter(sentiment='NEGATIVE').count(),
+            'partially_negative_count': all_reviews.filter(sentiment='PARTIALLY_NEGATIVE').count(),
             'neutral_count': all_reviews.filter(sentiment='NEUTRAL').count(),
             'spam_count': all_reviews.filter(sentiment='SPAM').count(),
             'back_params': '&'.join(back_parts),
