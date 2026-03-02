@@ -124,6 +124,8 @@ class GeneralStatsService:
             qr_visits_filter = Q(client__invited_by__isnull=True)
             if date_from:
                 qr_visits_filter &= Q(visited_at__gte=date_from)
+            if date_to:
+                qr_visits_filter &= Q(visited_at__lte=date_to)
             if branch_id:
                 qr_visits_filter &= Q(client__branch_id=branch_id)
             qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
@@ -238,7 +240,9 @@ class GeneralStatsService:
 
         all_period_qs = all_qs
         if date_from:
-            all_period_qs = all_qs.filter(created_at__gte=date_from)
+            all_period_qs = all_period_qs.filter(created_at__gte=date_from)
+        if date_to:
+            all_period_qs = all_period_qs.filter(created_at__lte=date_to)
 
         # ── Основная выборка — БЕЗ реферальных (из историй).
         # Клиенты с invited_by учитываются ТОЛЬКО в метрике «Перешли из историй».
@@ -246,7 +250,9 @@ class GeneralStatsService:
 
         period_qs = base_qs
         if date_from:
-            period_qs = base_qs.filter(created_at__gte=date_from)
+            period_qs = period_qs.filter(created_at__gte=date_from)
+        if date_to:
+            period_qs = period_qs.filter(created_at__lte=date_to)
 
         total_clients = base_qs.values("client").distinct().count()
         total_clients_period = period_qs.values("client").distinct().count()
@@ -280,8 +286,12 @@ class GeneralStatsService:
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
+        if date_to:
+            attempt_filters['created_at__lte'] = date_to
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
+        # Исключаем реферальных — у них отдельная метрика «Перешли из историй»
+        attempt_filters['client__invited_by__isnull'] = True
         # Считаем «возврат» как игру в ДРУГОЙ день (не в тот же визит).
         # Игра сразу после публикации сторис (в тот же день) НЕ считается повторным визитом.
         from django.db.models.functions import TruncDate
@@ -296,6 +306,8 @@ class GeneralStatsService:
         expense_filter = Q(transactions__type="EXPENSE")
         if date_from:
             expense_filter &= Q(transactions__created_at__gte=date_from)
+        if date_to:
+            expense_filter &= Q(transactions__created_at__lte=date_to)
         bought_prizes = base_qs.filter(expense_filter).values("client").distinct().count()
 
         # Фильтр по дате ПУБЛИКАЦИИ сторис, а не по дате регистрации
@@ -310,9 +322,13 @@ class GeneralStatsService:
 
         staff_index = cls.get_staff_engagement_index(date_from, date_to)
 
-        msg_filters = Q(status='sent')
+        msg_filters = Q(status='sent', client__invited_by__isnull=True)
         if date_from:
             msg_filters &= Q(sent_at__gte=date_from)
+        if date_to:
+            msg_filters &= Q(sent_at__lte=date_to)
+        if branch_id:
+            msg_filters &= Q(client__branch_id=branch_id)
 
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
@@ -321,9 +337,13 @@ class GeneralStatsService:
 
         try:
             from apps.tenant.inventory.models import SuperPrize
-            bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
+            bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False, client__invited_by__isnull=True)
             if date_from:
                 bp_filters &= Q(activated_at__gte=date_from)
+            if date_to:
+                bp_filters &= Q(activated_at__lte=date_to)
+            if branch_id:
+                bp_filters &= Q(client__branch_id=branch_id)
             activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).values('client').distinct().count()
         except Exception as e:
             logger.warning("Could not fetch birthday prizes: %s", e)
@@ -339,20 +359,15 @@ class GeneralStatsService:
 
         # Общее количество гостей в рассылке (ВСЕ ВРЕМЯ, не за период)
         # ТОЛЬКО те, кто разрешил рассылку ИМЕННО через наше приложение
-        total_mailing_qs = all_qs.filter(allowed_message_via_app=True)
+        # Реферальные НЕ учитываются (они только в метрике «Перешли из историй»)
+        total_mailing_qs = base_qs.filter(allowed_message_via_app=True)
         total_mailing_subscribers = total_mailing_qs.values("client").distinct().count()
 
         # Подписались в сообщество ВК ЗА ПЕРИОД — ИМЕННО через приложение
         group_subscribers = period_qs.filter(joined_community_via_app=True).distinct().count()
 
         # Подписались на рассылку ВК ЗА ПЕРИОД — ИМЕННО через приложение
-        mailing_subscribers_period = 0
-        try:
-            from apps.tenant.senler.services import VKService
-            vk_service = VKService()
-            mailing_subscribers_period = period_qs.filter(allowed_message_via_app=True).distinct().count()
-        except Exception as e:
-            logger.warning("VK service error: %s", e)
+        mailing_subscribers_period = period_qs.filter(allowed_message_via_app=True).distinct().count()
 
         # ── Данные о гостях из POS систем (IIKO / Dooglys) ──
         # Загружаются асинхронно через AJAX (/analytics/api/v1/pos-stats/)
@@ -385,6 +400,8 @@ class GeneralStatsService:
             qs_filters = Q()
             if date_from:
                 qs_filters &= Q(created_at__gte=date_from)
+            if date_to:
+                qs_filters &= Q(created_at__lte=date_to)
             if branch_id:
                 qs_filters &= Q(client__branch_id=branch_id)
             quest_qs = QuestSubmit.objects.filter(qs_filters)
@@ -400,6 +417,8 @@ class GeneralStatsService:
             rev_filters = Q()
             if date_from:
                 rev_filters &= Q(created_at__gte=date_from)
+            if date_to:
+                rev_filters &= Q(created_at__lte=date_to)
             if branch_id:
                 rev_filters &= Q(client__branch_id=branch_id)
             clients_left_review = BT.objects.filter(rev_filters, client__isnull=False).values('client').distinct().count()

@@ -137,6 +137,18 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
         
+        # ── Все клиенты (включая реферальных) для отдельных метрик
+        all_qs = ClientBranch.objects.all()
+        if branch_ctx.get('selected_branch_id'):
+            all_qs = all_qs.filter(branch_id=branch_ctx['selected_branch_id'])
+
+        if date_from and date_to:
+            all_period_qs = all_qs.filter(created_at__gte=date_from, created_at__lte=date_to)
+        elif date_from:
+            all_period_qs = all_qs.filter(created_at__gte=date_from)
+        else:
+            all_period_qs = all_qs
+
         qs = ClientBranch.objects.filter(invited_by__isnull=True)
         if branch_ctx.get('selected_branch_id'):
             qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
@@ -170,13 +182,10 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
             "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
-            "clients_posted_story": (
-                'Опубликовали историй в ВК',
-                qs.filter(is_story_uploaded=True, story_uploaded_at__gte=date_from) if date_from else qs.filter(is_story_uploaded=True)
-            ),
+            "clients_posted_story": lambda: self._get_posted_story_clients(qs, date_from, date_to, branch_id),
             "clients_from_referral": (
                 'Перешли из историй ВК',
-                period_qs.filter(invited_by__isnull=False)
+                all_period_qs.filter(invited_by__isnull=False)
             ),
         }
 
@@ -209,6 +218,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
+        from django.db.models.functions import TruncDate
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
@@ -216,28 +226,30 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             attempt_filters['created_at__lte'] = date_to
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
+        # Считаем «возврат» как игру в ДРУГОЙ календарный день (не просто 2+ попытки).
+        # Если гость сыграл 10 раз за один день — это один визит, не повторный.
         repeat_client_ids = ClientAttempt.objects.filter(
             **attempt_filters
-        ).values('client').annotate(
-            attempt_count=Count('id')
-        ).filter(attempt_count__gte=2).values_list('client', flat=True)
+        ).annotate(
+            play_date=TruncDate('created_at')
+        ).values('client', 'play_date').distinct().values('client').annotate(
+            days_cnt=Count('play_date', distinct=True)
+        ).filter(days_cnt__gte=2).values_list('client', flat=True)
         return ('Вернулись и сыграли в игру повторно', qs.filter(id__in=repeat_client_ids))
 
     @staticmethod
     def _get_birthday_clients(qs, date_from, date_to=None, branch_id=None):
-        filters = Q(
-            client__birth_date__isnull=False,
-            created_at__day=F('client__birth_date__day'),
-            created_at__month=F('client__birth_date__month'),
-        )
+        from apps.tenant.inventory.models import SuperPrize
+        # Пришли отметить ДР = активировали подарок ко дню рождения (ввели код дня у персонала)
+        bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
         if date_from:
-            filters &= Q(created_at__gte=date_from)
+            bp_filters &= Q(activated_at__gte=date_from)
         if date_to:
-            filters &= Q(created_at__lte=date_to)
+            bp_filters &= Q(activated_at__lte=date_to)
         if branch_id:
-            filters &= Q(client__branch_id=branch_id)
-        birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
-        return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
+            bp_filters &= Q(client__branch_id=branch_id)
+        client_ids = SuperPrize.objects.filter(bp_filters).values_list('client_id', flat=True).distinct()
+        return ('Пришли отметить день рождения', qs.filter(id__in=client_ids))
 
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
@@ -281,11 +293,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.branch.models import ClientBranchVisit
-        visit_filters = Q()
+        visit_filters = Q(client__invited_by__isnull=True)
         if date_from:
-            visit_filters &= Q(created_at__gte=date_from)
+            visit_filters &= Q(visited_at__gte=date_from)
         if date_to:
-            visit_filters &= Q(created_at__lte=date_to)
+            visit_filters &= Q(visited_at__lte=date_to)
         if branch_id:
             visit_filters &= Q(client__branch_id=branch_id)
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
@@ -294,11 +306,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(campaign__title__icontains="День Рождения")
+        log_filters = Q(status='sent', campaign__title__icontains="День Рождения")
         if date_from:
-            log_filters &= Q(created_at__gte=date_from)
+            log_filters &= Q(sent_at__gte=date_from)
         if date_to:
-            log_filters &= Q(created_at__lte=date_to)
+            log_filters &= Q(sent_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
@@ -307,15 +319,26 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(is_read=True)
+        log_filters = Q(status='sent', is_read=True)
         if date_from:
-            log_filters &= Q(created_at__gte=date_from)
+            log_filters &= Q(sent_at__gte=date_from)
         if date_to:
-            log_filters &= Q(created_at__lte=date_to)
+            log_filters &= Q(sent_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
         return ('% открываемости сообщений в ВК', qs.filter(id__in=client_ids))
+
+    @staticmethod
+    def _get_posted_story_clients(qs, date_from, date_to=None, branch_id=None):
+        story_filter = Q(is_story_uploaded=True, story_uploaded_at__isnull=False)
+        if date_from:
+            story_filter &= Q(story_uploaded_at__gte=date_from)
+        if date_to:
+            story_filter &= Q(story_uploaded_at__lte=date_to)
+        if branch_id:
+            story_filter &= Q(branch_id=branch_id)
+        return ('Опубликовали историй в ВК', qs.filter(story_filter))
 
 
 class AwayView(LoginRequiredMixin, View):
