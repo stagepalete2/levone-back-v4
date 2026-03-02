@@ -78,7 +78,7 @@ class AIService:
             f"Ты классификатор отзывов. Твоя задача определить тональность.\n"
             f"Инструкции:\n{instructions}\n\n"
             f"ВАЖНО: Верни ТОЛЬКО чистый JSON без markdown блоков и лишнего текста.\n"
-            f"Формат: {{'sentiment': 'POSITIVE'|'NEGATIVE'|'NEUTRAL'|'SPAM', 'reason': '...'}}"
+            f"Формат: {{'sentiment': 'POSITIVE'|'NEGATIVE'|'NEUTRAL'|'SPAM'|'PARTIALLY_NEGATIVE', 'reason': '...'}}"
         )
 
         try:

@@ -343,9 +343,13 @@
     .sentiment-negative .sentiment-count { color: #dc3545; }
     .sentiment-negative:hover { background: #fdf0f1; }
 
-    .sentiment-neutral .sentiment-label { color: #fd7e14; }
-    .sentiment-neutral .sentiment-count { color: #fd7e14; }
-    .sentiment-neutral:hover { background: #fff8f0; }
+    .sentiment-partially-negative .sentiment-label { color: #fd7e14; }
+    .sentiment-partially-negative .sentiment-count { color: #fd7e14; }
+    .sentiment-partially-negative:hover { background: #fff8f0; }
+
+    .sentiment-neutral .sentiment-label { color: #17a2b8; }
+    .sentiment-neutral .sentiment-count { color: #17a2b8; }
+    .sentiment-neutral:hover { background: #f0f9fb; }
 
     .sentiment-spam .sentiment-label { color: #6c757d; }
     .sentiment-spam .sentiment-count { color: #6c757d; }
@@ -466,8 +470,12 @@
                 <div class="sentiment-label">НЕГАТИВНЫЙ</div>
                 <div class="sentiment-count">{{ stats.testimonials.negative|default:0 }}</div>
             </a>
-            <a href="{% url 'admin-reviews-list' %}?sentiment=NEUTRAL{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-neutral">
+            <a href="{% url 'admin-reviews-list' %}?sentiment=PARTIALLY_NEGATIVE{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-partially-negative">
                 <div class="sentiment-label">ЧАСТИЧНО НЕГАТИВНЫЙ</div>
+                <div class="sentiment-count">{{ stats.testimonials.partially_negative|default:0 }}</div>
+            </a>
+            <a href="{% url 'admin-reviews-list' %}?sentiment=NEUTRAL{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-neutral">
+                <div class="sentiment-label">НЕЙТРАЛЬНЫЙ</div>
                 <div class="sentiment-count">{{ stats.testimonials.neutral|default:0 }}</div>
             </a>
             <a href="{% url 'admin-reviews-list' %}?sentiment=SPAM{% if selected_branch_id %}&branch={{ selected_branch_id }}{% endif %}{% if custom_date_from %}&custom_date_from={{ custom_date_from }}&custom_date_to={{ custom_date_to }}{% elif period_code %}&period={{ period_code }}{% endif %}" class="sentiment-card sentiment-spam">
@@ -691,11 +699,11 @@
         }}]
     });
 
-    const tP = {{ stats.testimonials.positive|default:0 }}, tN = {{ stats.testimonials.negative|default:0 }}, tNu = {{ stats.testimonials.neutral|default:0 }};
-    const tT = tP + tN + tNu;
+    const tP = {{ stats.testimonials.positive|default:0 }}, tN = {{ stats.testimonials.negative|default:0 }}, tPN = {{ stats.testimonials.partially_negative|default:0 }}, tNu = {{ stats.testimonials.neutral|default:0 }};
+    const tT = tP + tN + tPN + tNu;
     new Chart(document.getElementById('qualityIndexChart'), {
         type: 'doughnut',
-        data: { labels: ['Позитивный', 'Негативный', 'Частично негативный'], datasets: [{ data: tT > 0 ? [tP, tN, tNu] : [0,0,1], backgroundColor: tT > 0 ? ['#28a745','#dc3545','#fd7e14'] : [emptyColor,emptyColor,emptyColor] }] },
+        data: { labels: ['Позитивный', 'Негативный', 'Частично негативный', 'Нейтральный'], datasets: [{ data: tT > 0 ? [tP, tN, tPN, tNu] : [0,0,0,1], backgroundColor: tT > 0 ? ['#28a745','#dc3545','#fd7e14','#17a2b8'] : [emptyColor,emptyColor,emptyColor,emptyColor] }] },
         options: { ...commonOptions, cutout: '75%' }
     });
 

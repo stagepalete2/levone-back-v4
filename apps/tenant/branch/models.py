@@ -323,6 +323,7 @@ class BranchTestimonials(TimeStampedModel):
     class Sentiment(models.TextChoices):
         POSITIVE = 'POSITIVE', 'Позитивный'
         NEGATIVE = 'NEGATIVE', 'Негативный'
+        PARTIALLY_NEGATIVE = 'PARTIALLY_NEGATIVE', 'Частино негативный'
         NEUTRAL = 'NEUTRAL', 'Нейтральный'
         SPAM = 'SPAM', 'Спам/Не по теме'
         WAITING = 'WAITING', 'Ожидает анализа'

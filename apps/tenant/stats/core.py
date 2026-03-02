@@ -412,6 +412,7 @@ class GeneralStatsService:
                 'total': t_qs.count(),
                 'positive': t_qs.filter(sentiment='POSITIVE').count(),
                 'negative': t_qs.filter(sentiment='NEGATIVE').count(),
+                'partially_negative': t_qs.filter(sentiment='PARTIALLY_NEGATIVE').count(),
                 'neutral': t_qs.filter(sentiment='NEUTRAL').count(),
                 'spam': t_qs.filter(sentiment='SPAM').count(),
             }
