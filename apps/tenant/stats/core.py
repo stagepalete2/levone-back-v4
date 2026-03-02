@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
-from django.db.models import Count, F, Q, Max
+from django.db.models import Count, F, Q, Max, Min
 from django.db.models.functions import ExtractDay, ExtractMonth
 from django.shortcuts import get_object_or_404
 from django.db import transaction
@@ -251,15 +251,26 @@ class GeneralStatsService:
         total_clients = base_qs.values("client").distinct().count()
         total_clients_period = period_qs.values("client").distinct().count()
         from apps.tenant.inventory.models import SuperPrize as _SP
-        _sp_filters = Q(acquired_from='GAME')
+
+        # Находим дату ПЕРВОГО суперприза (GAME) для каждого клиента
+        first_prize_dates = _SP.objects.filter(
+            acquired_from='GAME'
+        ).values('client_id').annotate(
+            first_prize_at=Min('created_at')
+        )
+
+        # Фильтруем: первый приз попадает в выбранный период
+        first_in_period = first_prize_dates
         if date_from:
-            _sp_filters &= Q(created_at__gte=date_from)
+            first_in_period = first_in_period.filter(first_prize_at__gte=date_from)
         if date_to:
-            _sp_filters &= Q(created_at__lte=date_to)
+            first_in_period = first_in_period.filter(first_prize_at__lte=date_to)
         if branch_id:
-            _sp_filters &= Q(client__branch_id=branch_id)
-        _sp_ids = _SP.objects.filter(_sp_filters).values_list('client_id', flat=True)
-        # Новые: подписались на сообщество И/ИЛИ рассылку ЧЕРЕЗ приложение + получили первый подарок
+            first_in_period = first_in_period.filter(client__branch_id=branch_id)
+
+        _sp_ids = first_in_period.values_list('client_id', flat=True)
+
+        # Новые: подписались на сообщество И/ИЛИ рассылку ЧЕРЕЗ приложение + получили ПЕРВЫЙ подарок за период
         super_prize_new = base_qs.filter(
             id__in=_sp_ids
         ).filter(
@@ -305,15 +316,15 @@ class GeneralStatsService:
 
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
-            template_type='birthday_today',
-        ).count()
+            campaign__title__icontains='День Рождения',
+        ).values('client').distinct().count()
 
         try:
             from apps.tenant.inventory.models import SuperPrize
             bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False)
             if date_from:
                 bp_filters &= Q(activated_at__gte=date_from)
-            activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).count()
+            activated_birthday_prizes = SuperPrize.objects.filter(bp_filters).values('client').distinct().count()
         except Exception as e:
             logger.warning("Could not fetch birthday prizes: %s", e)
             activated_birthday_prizes = 0
@@ -327,7 +338,7 @@ class GeneralStatsService:
             community_qs = community_qs.filter(branch_id=branch_id)
 
         # Общее количество гостей в рассылке (ВСЕ ВРЕМЯ, не за период)
-        # Только те, кто разрешил рассылку ЧЕРЕЗ наше приложение
+        # ТОЛЬКО те, кто разрешил рассылку ИМЕННО через наше приложение
         total_mailing_qs = all_qs.filter(allowed_message_via_app=True)
         total_mailing_subscribers = total_mailing_qs.values("client").distinct().count()
 

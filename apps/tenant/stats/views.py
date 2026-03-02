@@ -153,8 +153,8 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         title_map = {
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
             "mailing_subscribers": (
-                'Общее количество гостей в рассылке',
-                qs.filter(is_allowed_message=True)
+                'Общее количество гостей, подписавшихся на рассылку через приложение',
+                qs.filter(allowed_message_via_app=True)
             ),
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
@@ -172,7 +172,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
             "clients_posted_story": (
                 'Опубликовали историй в ВК',
-                period_qs.filter(is_story_uploaded=True)
+                qs.filter(is_story_uploaded=True, story_uploaded_at__gte=date_from) if date_from else qs.filter(is_story_uploaded=True)
             ),
             "clients_from_referral": (
                 'Перешли из историй ВК',
@@ -242,17 +242,28 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
         from apps.tenant.inventory.models import SuperPrize
-        prize_filters = Q(acquired_from='GAME')
+        from django.db.models import Min
+
+        # Дата ПЕРВОГО суперприза (GAME) для каждого клиента
+        first_prize_dates = SuperPrize.objects.filter(
+            acquired_from='GAME'
+        ).values('client_id').annotate(
+            first_prize_at=Min('created_at')
+        )
+
         if date_from:
-            prize_filters &= Q(created_at__gte=date_from)
+            first_prize_dates = first_prize_dates.filter(first_prize_at__gte=date_from)
         if date_to:
-            prize_filters &= Q(created_at__lte=date_to)
+            first_prize_dates = first_prize_dates.filter(first_prize_at__lte=date_to)
         if branch_id:
-            prize_filters &= Q(client__branch_id=branch_id)
-        client_ids = SuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
+            first_prize_dates = first_prize_dates.filter(client__branch_id=branch_id)
+
+        client_ids = first_prize_dates.values_list('client_id', flat=True)
         return (
             'Новые в группе и рассылке, получившие первый подарок',
-            qs.filter(id__in=client_ids, joined_community_via_app=True)
+            qs.filter(id__in=client_ids).filter(
+                Q(joined_community_via_app=True) | Q(allowed_message_via_app=True)
+            )
         )
 
     @staticmethod
