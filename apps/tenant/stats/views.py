@@ -154,18 +154,18 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
             "mailing_subscribers": (
                 'Общее количество гостей в рассылке',
-                qs.filter(is_joined_community=True)
+                qs.filter(is_allowed_message=True)
             ),
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
             "group_subscribers": (
-                'Подписались в сообщество ВК',
-                qs.filter(is_joined_community=True)
+                'Подписались в сообщество ВК ЧЕРЕЗ приложение за период',
+                period_qs.filter(joined_community_via_app=True)
             ),
             "mailing_period": (
-                'Подписались на рассылку ВК',
-                period_qs.filter(is_joined_community=True)
+                'Подписались на рассылку ВК ЧЕРЕЗ приложение',
+                period_qs.filter(allowed_message_via_app=True)
             ),
             "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
             "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
@@ -252,7 +252,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         client_ids = SuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
         return (
             'Новые в группе и рассылке, получившие первый подарок',
-            qs.filter(id__in=client_ids, is_joined_community=True)
+            qs.filter(id__in=client_ids, joined_community_via_app=True)
         )
 
     @staticmethod

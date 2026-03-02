@@ -361,9 +361,12 @@ class InventoryService:
                 ).first()
 
                 if not daily_code:
-                    raise ValidationError(
-                        message='Код дня ещё не создан. Обратитесь к персоналу.',
-                        code='code_not_set',
+                    # Автогенерация кода если celery не создал его
+                    from apps.shared.config.utils import generate_code
+                    daily_code = BranchDailyCode.objects.create(
+                        branch_id=branch_id,
+                        date=today,
+                        code=generate_code()
                     )
 
                 if daily_code.code != code.upper().strip():

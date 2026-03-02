@@ -75,6 +75,12 @@ def check_tenant_birthdays(schema_name):
                 },
             )
 
+            # Базовый фильтр — только те, кто разрешил сообщения
+            base_filter = {
+                'client__vk_user_id__isnull': False,
+                'is_allowed_message': True,
+            }
+
             # ----------------------------------------------------------
             # ЗА 7 ДНЕЙ: сообщение «через неделю твой ДР»
             # ----------------------------------------------------------
@@ -82,7 +88,7 @@ def check_tenant_birthdays(schema_name):
             clients_7 = ClientBranch.objects.filter(
                 birth_date__month=target_date_7.month,
                 birth_date__day=target_date_7.day,
-                client__vk_user_id__isnull=False,
+                **base_filter,
             )
             if clients_7.exists():
                 msg_text = MessageTemplate.get_text(
@@ -102,7 +108,7 @@ def check_tenant_birthdays(schema_name):
             clients_1 = ClientBranch.objects.filter(
                 birth_date__month=target_date_1.month,
                 birth_date__day=target_date_1.day,
-                client__vk_user_id__isnull=False,
+                **base_filter,
             )
             if clients_1.exists():
                 msg_text = MessageTemplate.get_text(
@@ -116,11 +122,11 @@ def check_tenant_birthdays(schema_name):
                     logger.warning(f"[{schema_name}] Шаблон birthday_1day не найден или неактивен.")
             
 
-            target_date_0 = today  # ИСПРАВЛЕНО: сегодня, а не завтра
+            target_date_0 = today
             clients_0 = ClientBranch.objects.filter(
                 birth_date__month=target_date_0.month,
                 birth_date__day=target_date_0.day,
-                client__vk_user_id__isnull=False,
+                **base_filter,
             )
             if clients_0.exists():
                 msg_text = MessageTemplate.get_text(
@@ -243,3 +249,58 @@ def send_campaign_chunk(self, campaign_id, client_ids, schema_name, attachment=N
             )
     except Exception as exc:
         raise self.retry(exc=exc, countdown=5)
+
+
+# --- Напоминание о неактивированных призах ---
+
+@shared_task
+def check_prize_reminders_daily():
+    """Диспетчер: запускает проверку напоминаний о призах для каждого тенанта."""
+    from django_tenants.utils import get_tenant_model
+    TenantModel = get_tenant_model()
+
+    for tenant in TenantModel.objects.exclude(schema_name='public'):
+        check_tenant_prize_reminders.delay(tenant.schema_name)
+
+
+@shared_task
+def check_tenant_prize_reminders(schema_name):
+    """
+    Находит клиентов с неактивированными призами (суперприз или инвентарь)
+    и отправляет им напоминание через шаблон 'prize_reminder'.
+    """
+    with schema_context(schema_name):
+        try:
+            vk_service = VKService()
+            if not vk_service.is_configured:
+                return
+
+            defaults = MessageTemplate.get_defaults()
+            msg_text = MessageTemplate.get_text(
+                'prize_reminder',
+                defaults.get('prize_reminder', '')
+            )
+            if not msg_text:
+                logger.info(f"[{schema_name}] Шаблон prize_reminder не найден или неактивен.")
+                return
+
+            # Ищем клиентов с неактивированными суперпризами (product выбран, но не активирован)
+            from apps.tenant.inventory.models import SuperPrize
+            clients_with_prizes = ClientBranch.objects.filter(
+                client__vk_user_id__isnull=False,
+                is_allowed_message=True,
+                superprizes__activated_at__isnull=True,
+                superprizes__product__isnull=False,
+            ).distinct()
+
+            if clients_with_prizes.exists():
+                vk_service.send_batch_messages(
+                    list(clients_with_prizes),
+                    msg_text
+                )
+                logger.info(
+                    f"[{schema_name}] Отправлено {clients_with_prizes.count()} напоминаний о призах."
+                )
+
+        except Exception as e:
+            logger.error(f"[{schema_name}] Ошибка при отправке напоминаний о призах: {e}")

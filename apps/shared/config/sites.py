@@ -77,6 +77,7 @@ class TenantAdminSite(admin.AdminSite):
         from apps.tenant.game.models import DailyCode as GameDailyCodes
         from apps.tenant.quest.models import DailyCode as QuestDailyCodes
         from apps.tenant.branch.models import DailyCode as BirthdayDailyCodes
+        from apps.shared.config.utils import generate_code
         
         extra_context = extra_context or {}
         today = timezone.localdate()
@@ -85,15 +86,25 @@ class TenantAdminSite(admin.AdminSite):
         branches = Branch.objects.all()
         
         for branch in branches:
-            game_code = GameDailyCodes.objects.filter(date=today, branch=branch).first()
-            quest_code = QuestDailyCodes.objects.filter(date=today, branch=branch).first()
-            birthday_code = BirthdayDailyCodes.objects.filter(date=today, branch=branch).first()
+            # Автогенерация кодов если не были созданы (фикс бага с celery)
+            game_code_obj, _ = GameDailyCodes.objects.get_or_create(
+                date=today, branch=branch,
+                defaults={"code": generate_code()}
+            )
+            quest_code_obj, _ = QuestDailyCodes.objects.get_or_create(
+                date=today, branch=branch,
+                defaults={"code": generate_code()}
+            )
+            birthday_code_obj, _ = BirthdayDailyCodes.objects.get_or_create(
+                date=today, branch=branch,
+                defaults={"code": generate_code()}
+            )
 
             branch_codes.append({
                 "branch": branch.name,
-                "game_code": game_code.code if game_code else "Не сгенерирован",
-                "quest_code": quest_code.code if quest_code else "Не сгенерирован",
-                "birthday_code" : birthday_code.code if birthday_code else 'Не сгенерирован',
+                "game_code": game_code_obj.code,
+                "quest_code": quest_code_obj.code,
+                "birthday_code": birthday_code_obj.code,
             })
         
         extra_context['today'] = today

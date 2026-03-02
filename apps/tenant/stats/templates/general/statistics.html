@@ -527,7 +527,7 @@
         {# 7. Подписались на рассылку ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='mailing_period' %}?{{ period_params }}" class="stat-card">
             <h3>📨 Подписались на рассылку ВК за период</h3>
-            <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
+            <div class="metric">{{ stats.mailing_subscribers_period|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 

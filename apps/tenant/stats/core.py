@@ -259,7 +259,7 @@ class GeneralStatsService:
         if branch_id:
             _sp_filters &= Q(client__branch_id=branch_id)
         _sp_ids = _SP.objects.filter(_sp_filters).values_list('client_id', flat=True)
-        super_prize_new = base_qs.filter(id__in=_sp_ids, is_joined_community=True).distinct().count()
+        super_prize_new = base_qs.filter(id__in=_sp_ids, joined_community_via_app=True).distinct().count()
 
         attempt_filters = {}
         if date_from:
@@ -309,13 +309,21 @@ class GeneralStatsService:
         community_qs = ClientBranch.objects.filter(is_joined_community=True)
         if branch_id:
             community_qs = community_qs.filter(branch_id=branch_id)
-        group_subscribers = period_qs.filter(is_joined_community=True).distinct().count()
 
-        mailing_subscribers = 0
+        # Общее количество гостей в рассылке (ВСЕ ВРЕМЯ, не за период)
+        # Это те, кто разрешил получать сообщения — is_allowed_message=True
+        total_mailing_qs = all_qs.filter(is_allowed_message=True)
+        total_mailing_subscribers = total_mailing_qs.values("client").distinct().count()
+
+        # Подписались в сообщество ВК ЗА ПЕРИОД — ИМЕННО через приложение
+        group_subscribers = period_qs.filter(joined_community_via_app=True).distinct().count()
+
+        # Подписались на рассылку ВК ЗА ПЕРИОД — ИМЕННО через приложение
+        mailing_subscribers_period = 0
         try:
             from apps.tenant.senler.services import VKService
             vk_service = VKService()
-            mailing_subscribers = period_qs.filter(is_joined_community=True).distinct().count()
+            mailing_subscribers_period = period_qs.filter(allowed_message_via_app=True).distinct().count()
         except Exception as e:
             logger.warning("VK service error: %s", e)
 
@@ -408,7 +416,8 @@ class GeneralStatsService:
             "clients_from_referral": referral,
             "staff_engagement_index": staff_index,
             "group_subscribers": group_subscribers,
-            "mailing_subscribers": mailing_subscribers,
+            "mailing_subscribers": total_mailing_subscribers,
+            "mailing_subscribers_period": mailing_subscribers_period,
             "qr_scans_today": qr_scans_today,
             "pos_guests_today": pos_guests_today,
             "iiko_guests_today": pos_guests_today,

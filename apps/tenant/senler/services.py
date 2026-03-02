@@ -254,6 +254,45 @@ class VKService:
             logger.error(f"Error getting group members count: {e}")
             return 0
 
+    def check_is_group_member(self, vk_user_id: int) -> bool:
+        """
+        Проверяет, является ли пользователь участником группы ВК.
+        Возвращает True если уже подписан, False если нет.
+        """
+        if not self.is_configured:
+            return False
+
+        try:
+            group_id = self.config.group_id
+            result = self.vk.groups.isMember(
+                group_id=group_id,
+                user_id=vk_user_id
+            )
+            # VK API возвращает 1 если участник, 0 если нет
+            return bool(result)
+        except Exception as e:
+            logger.error(f"Error checking group membership for {vk_user_id}: {e}")
+            return False
+
+    def check_is_messages_allowed(self, vk_user_id: int) -> bool:
+        """
+        Проверяет, разрешил ли пользователь сообщения от группы.
+        Возвращает True если уже разрешил, False если нет.
+        """
+        if not self.is_configured:
+            return False
+
+        try:
+            group_id = self.config.group_id
+            result = self.vk.messages.isMessagesFromGroupAllowed(
+                group_id=group_id,
+                user_id=vk_user_id
+            )
+            return bool(result.get('is_allowed', 0))
+        except Exception as e:
+            logger.error(f"Error checking messages allowed for {vk_user_id}: {e}")
+            return False
+
     def get_mailing_subscribers_count(self) -> int:
         """
         Получает количество пользователей, разрешивших рассылку.

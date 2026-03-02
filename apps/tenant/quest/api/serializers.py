@@ -121,11 +121,19 @@ class SubmitQuestSerializer(BaseQuestActionSerializer):
             raise serializers.ValidationError("Время на выполнение задания истекло")
 
         # 3. Проверяем Код дня
-        latest_code = DailyCode.objects.filter(branch=branch).order_by("-date").first()
+        from django.utils.timezone import now as _now
+        today = _now().date()
+        latest_code = DailyCode.objects.filter(branch=branch, date=today).first()
         if not latest_code:
-             raise serializers.ValidationError("Код дня не установлен в системе")
+            # Автогенерация кода если celery не создал его
+            from apps.shared.config.utils import generate_code
+            latest_code = DailyCode.objects.create(
+                branch=branch,
+                date=today,
+                code=generate_code()
+            )
         
-        if latest_code.date < now().date():
+        if latest_code.date < today:
              raise serializers.ValidationError("Код дня просрочен")
 
         if code_input != latest_code.code:

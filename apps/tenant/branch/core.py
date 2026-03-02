@@ -92,15 +92,52 @@ class ClientService:
 				base_client.save()
 
 		# Связь с тенантом
-		client_branch, _ = ClientBranch.objects.get_or_create(
+		client_branch, cb_created = ClientBranch.objects.get_or_create(
 			client=base_client,
 			branch=branch
 		)
+		
+		# При ПЕРВОМ создании профиля — проверяем VK API:
+		# был ли пользователь УЖЕ подписан на группу и рассылку ДО нашего приложения.
+		# Если да — ставим is_joined_community/is_allowed_message = True сразу,
+		# чтобы при PATCH'е мы знали, что это НЕ новая подписка через приложение.
+		if cb_created:
+			try:
+				from apps.tenant.senler.services import VKService
+				vk_service = VKService()
+				if vk_service.is_configured:
+					was_member = vk_service.check_is_group_member(vk_user_id)
+					was_allowed = vk_service.check_is_messages_allowed(vk_user_id)
+					
+					if was_member:
+						client_branch.is_joined_community = True
+					if was_allowed:
+						client_branch.is_allowed_message = True
+					
+					if was_member or was_allowed:
+						client_branch.save(update_fields=['is_joined_community', 'is_allowed_message'])
+			except Exception as e:
+				import logging
+				logging.getLogger(__name__).warning(f"VK check at registration failed for {vk_user_id}: {e}")
 		
 		# Если передали ДР, сохраняем
 		if data.get('birth_date'):
 			client_branch.birth_date = data['birth_date']
 			client_branch.save(update_fields=['birth_date'])
+		
+		# Отправляем приветственное сообщение при ПЕРВОМ создании профиля
+		if cb_created:
+			try:
+				from apps.tenant.senler.tasks import send_single_message
+				send_single_message.delay(
+					client_branch_id=client_branch.id,
+					text=None,
+					schema_name=connection.schema_name,
+					template_type='welcome'
+				)
+			except Exception as e:
+				import logging
+				logging.getLogger(__name__).warning(f"Welcome message scheduling failed for {vk_user_id}: {e}")
 		
 		return client_branch
 
@@ -108,9 +145,16 @@ class ClientService:
 	def update_profile_details(vk_user_id: int, branch_id: int, validated_data: dict) -> ClientBranch:
 		"""
 		Логика PATCH запроса.
+		Отслеживает переход is_joined_community и is_allowed_message
+		из False → True как реальную подписку через приложение.
 		"""
 		# Получаем объект (метод переиспользуем)
 		client_branch = ClientService.get_client_profile(vk_user_id, branch_id)
+
+		# Сохраняем старые значения ДО обновления
+		old_joined = client_branch.is_joined_community
+		old_allowed = client_branch.is_allowed_message
+		old_invited_by = client_branch.invited_by_id
 
 		# Обновляем поля ClientBranch
 		for attr, value in validated_data.items():
@@ -119,7 +163,39 @@ class ClientService:
 				continue
 			setattr(client_branch, attr, value)
 		
+		# Отслеживаем реальную подписку через приложение:
+		# Если is_joined_community было False (пользователь НЕ был подписан при регистрации)
+		# и теперь ставится True — значит подписался ИМЕННО через наше приложение
+		new_joined = client_branch.is_joined_community
+		new_allowed = client_branch.is_allowed_message
+
+		if not old_joined and new_joined:
+			client_branch.joined_community_via_app = True
+		
+		if not old_allowed and new_allowed:
+			client_branch.allowed_message_via_app = True
+
 		client_branch.save()
+
+		# Отправляем награду за реферала пригласившему, если invited_by установлен впервые
+		new_invited_by = client_branch.invited_by_id
+		if not old_invited_by and new_invited_by:
+			try:
+				inviter_branch = ClientBranch.objects.filter(
+					client_id=new_invited_by,
+					branch_id=branch_id
+				).first()
+				if inviter_branch:
+					from apps.tenant.senler.tasks import send_single_message
+					send_single_message.delay(
+						client_branch_id=inviter_branch.id,
+						text=None,
+						schema_name=connection.schema_name,
+						template_type='referral_reward'
+					)
+			except Exception as e:
+				import logging
+				logging.getLogger(__name__).warning(f"Referral reward message failed: {e}")
 		
 		return client_branch
 

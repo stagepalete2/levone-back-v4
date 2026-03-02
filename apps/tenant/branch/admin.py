@@ -393,11 +393,13 @@ class ClientBranchAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     list_display = (
         'client', 'branch', 'birth_date', 'coins_balance',
         'is_story_uploaded', 'is_joined_community',
-        'is_allowed_message', 'is_employee', 'created_at'
+        'is_allowed_message', 'joined_community_via_app',
+        'allowed_message_via_app', 'is_employee', 'created_at'
     )
-    list_filter = ('branch', 'is_employee', 'is_story_uploaded', 'is_joined_community')
+    list_filter = ('branch', 'is_employee', 'is_story_uploaded', 'is_joined_community',
+                   'joined_community_via_app', 'allowed_message_via_app')
     search_fields = ('client__name', 'client__lastname', 'client__vk_user_id')
-    readonly_fields = ('coins_balance',)
+    readonly_fields = ('coins_balance', 'joined_community_via_app', 'allowed_message_via_app')
 
 
 # ─── CoinTransaction ─────────────────────────────────────────

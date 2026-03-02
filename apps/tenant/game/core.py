@@ -151,7 +151,13 @@ class GameService:
         daily_code = DailyCode.objects.filter(branch_id=branch_id, date=today).first()
 
         if not daily_code:
-            raise ValidationError(message='Код дня еще не создан', code='code_not_set')
+            # Автогенерация кода если celery не создал его
+            from apps.shared.config.utils import generate_code
+            daily_code = DailyCode.objects.create(
+                branch_id=branch_id,
+                date=today,
+                code=generate_code()
+            )
 
         if daily_code.code != code.upper().strip():
             raise ValidationError(message='Неверный код', code='invalid_code')

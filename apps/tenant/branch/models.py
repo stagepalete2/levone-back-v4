@@ -180,6 +180,18 @@ class ClientBranch(TimeStampedModel):
     is_allowed_message = models.BooleanField(default=False, verbose_name='Разрешил отправку сообщений')
     is_super_prize_won = models.BooleanField(default=False, verbose_name='Выиграл суперприз')
 
+    # Флаги: подписка произошла ИМЕННО через наше приложение (а не была ранее)
+    joined_community_via_app = models.BooleanField(
+        default=False,
+        verbose_name='Вступил в сообщество ЧЕРЕЗ приложение',
+        help_text='True = пользователь НЕ был подписан до использования приложения и подписался через него'
+    )
+    allowed_message_via_app = models.BooleanField(
+        default=False,
+        verbose_name='Разрешил рассылку ЧЕРЕЗ приложение',
+        help_text='True = пользователь НЕ разрешал сообщения до приложения и разрешил через него'
+    )
+
     invited_by = models.ForeignKey(
         'guest.Client', 
         on_delete=models.SET_NULL,
