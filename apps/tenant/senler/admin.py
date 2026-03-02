@@ -93,11 +93,24 @@ class MailingCampaignAdmin(admin.ModelAdmin):
 
 
 class MessageLogAdmin(admin.ModelAdmin):
-    list_display = ('client', 'campaign', 'status', 'is_read', 'sent_at')
-    list_filter = ('status', 'is_read', 'campaign')
+    list_display = ('client', 'get_message_type', 'status', 'is_read', 'sent_at')
+    list_filter = ('status', 'is_read', 'template_type', 'campaign')
     list_select_related = ('client', 'campaign')
     search_fields = ('client__client__name', 'client__client__lastname')
-    readonly_fields = ('client', 'status', 'error_message', 'campaign', 'vk_message_id', 'is_read', 'read_at')
+    readonly_fields = ('client', 'status', 'error_message', 'campaign', 'template_type', 'vk_message_id', 'is_read', 'read_at')
+
+    def get_message_type(self, obj):
+        """Показывает тип сообщения: шаблон ИЛИ название кампании"""
+        if obj.template_type:
+            from apps.tenant.senler.models import MessageTemplate
+            type_map = dict(MessageTemplate.TEMPLATE_TYPES)
+            # Дополнительные типы, которых нет в шаблонах
+            type_map['review_reply'] = 'Ответ на отзыв'
+            return f"🤖 {type_map.get(obj.template_type, obj.template_type)}"
+        elif obj.campaign:
+            return f"📢 {obj.campaign.title}"
+        return "—"
+    get_message_type.short_description = "Тип сообщения"
 
 
 class MessageTemplateAdmin(admin.ModelAdmin):

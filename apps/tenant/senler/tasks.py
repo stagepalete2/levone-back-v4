@@ -96,7 +96,7 @@ def check_tenant_birthdays(schema_name):
                     defaults.get('birthday_7days', '')
                 )
                 if msg_text:
-                    vk_service.send_batch_messages(list(clients_7), msg_text, campaign=campaign)
+                    vk_service.send_batch_messages(list(clients_7), msg_text, campaign=campaign, template_type='birthday_7days')
                     logger.info(f"[{schema_name}] Отправлено {clients_7.count()} сообщений (7 дней до ДР).")
                 else:
                     logger.warning(f"[{schema_name}] Шаблон birthday_7days не найден или неактивен.")
@@ -116,7 +116,7 @@ def check_tenant_birthdays(schema_name):
                     defaults.get('birthday_1day', '')
                 )
                 if msg_text:
-                    vk_service.send_batch_messages(list(clients_1), msg_text, campaign=campaign)
+                    vk_service.send_batch_messages(list(clients_1), msg_text, campaign=campaign, template_type='birthday_1day')
                     logger.info(f"[{schema_name}] Отправлено {clients_1.count()} сообщений (1 день до ДР).")
                 else:
                     logger.warning(f"[{schema_name}] Шаблон birthday_1day не найден или неактивен.")
@@ -134,7 +134,7 @@ def check_tenant_birthdays(schema_name):
                     defaults.get('birthday_today', '')
                 )
                 if msg_text:
-                    vk_service.send_batch_messages(list(clients_0), msg_text, campaign=campaign)
+                    vk_service.send_batch_messages(list(clients_0), msg_text, campaign=campaign, template_type='birthday_today')
                     logger.info(f"[{schema_name}] Отправлено {clients_0.count()} сообщений (в день ДР).")
                 else:
                     logger.warning(f"[{schema_name}] Шаблон birthday_today не найден или неактивен.")
@@ -170,7 +170,7 @@ def _perform_send_single(client_branch_id, text, attachment, campaign_id, templa
         campaign = MailingCampaign.objects.get(id=campaign_id) if campaign_id else None
         service = VKService()
         if service.is_configured:
-            service.send_message(cb, text, attachment, campaign)
+            service.send_message(cb, text, attachment, campaign, template_type=template_type)
     except ClientBranch.DoesNotExist:
         pass
 
@@ -296,7 +296,8 @@ def check_tenant_prize_reminders(schema_name):
             if clients_with_prizes.exists():
                 vk_service.send_batch_messages(
                     list(clients_with_prizes),
-                    msg_text
+                    msg_text,
+                    template_type='prize_reminder'
                 )
                 logger.info(
                     f"[{schema_name}] Отправлено {clients_with_prizes.count()} напоминаний о призах."

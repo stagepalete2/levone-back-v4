@@ -9,7 +9,8 @@ from apps.shared.config.mixins import BranchRestrictedAdminMixin
 from apps.tenant.branch.models import (
     Branch, BranchConfig, TelegramBot, BotAdmin,
     ClientBranch, CoinTransaction, StoryImage,
-    BranchTestimonials, Promotions, ClientBranchVisit, DailyCode
+    BranchTestimonials, Promotions, ClientBranchVisit, DailyCode,
+    TestimonialReply
 )
 
 from apps.tenant.senler.services import VKService
@@ -435,22 +436,101 @@ class ReplyForm(forms.Form):
     text = forms.CharField(widget=forms.Textarea, label="Текст ответа")
 
 
+class TestimonialReplyInline(admin.TabularInline):
+    """Inline для показа истории ответов как диалог"""
+    model = TestimonialReply
+    extra = 0
+    readonly_fields = ('text', 'sent_at', 'sent_by', 'is_sent_successfully', 'error_message')
+    can_delete = False
+    verbose_name = 'Ответ'
+    verbose_name_plural = '💬 История ответов (диалог)'
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     client_branch_field_name = 'client'
     branch_field_name = None
 
     list_display = (
-        'source', 'short_review', 'rating', 'sentiment',
-        'is_replied', 'phone', 'table', 'created_at'
+        'source', 'short_review', 'display_rating', 'sentiment',
+        'replies_count', 'is_replied', 'phone', 'table', 'created_at'
     )
     list_filter = ('source', 'sentiment', 'rating', 'is_replied', 'client__branch')
-    readonly_fields = ('ai_comment', 'vk_sender_id', 'vk_message_id')
+    readonly_fields = ('ai_comment', 'vk_sender_id', 'vk_message_id', 'source', 'display_dialog')
     search_fields = ('review', 'phone')
     actions = ['reply_to_review_action']
+    inlines = [TestimonialReplyInline]
 
     def short_review(self, obj):
         return (obj.review[:60] + "...") if obj.review and len(obj.review) > 60 else (obj.review or "-")
     short_review.short_description = "Отзыв"
+
+    def display_rating(self, obj):
+        """Показывает оценку только для отзывов из приложения"""
+        if obj.rating is None:
+            return "—"
+        return f"{'⭐️' * obj.rating} ({obj.rating}/5)"
+    display_rating.short_description = "Оценка"
+
+    def replies_count(self, obj):
+        """Показывает количество ответов"""
+        count = obj.replies.count()
+        if count == 0:
+            return "—"
+        return f"💬 {count}"
+    replies_count.short_description = "Ответы"
+
+    def display_dialog(self, obj):
+        """Показывает историю диалога прямо на странице отзыва"""
+        replies = obj.replies.all().order_by('sent_at')
+        if not replies:
+            return format_html('<span style="color:#999;">Ответов пока нет</span>')
+        
+        html_parts = []
+        
+        # Сам отзыв
+        client_name = str(obj.client) if obj.client else (obj.vk_sender_id or "Гость")
+        source_label = "из приложения" if obj.source == 'APP' else "из ВК"
+        html_parts.append(
+            f'<div style="background:#e3f2fd;border-radius:8px;padding:10px 14px;margin-bottom:8px;max-width:80%;">'
+            f'<div style="font-size:11px;color:#666;margin-bottom:4px;">👤 {client_name} ({source_label}) — {obj.created_at:%d.%m.%Y %H:%M}</div>'
+            f'<div>{obj.review}</div>'
+            f'</div>'
+        )
+        
+        # Ответы
+        for reply in replies:
+            sent_by = reply.sent_by.get_full_name() if reply.sent_by else "Администратор"
+            status_icon = "✅" if reply.is_sent_successfully else "❌"
+            html_parts.append(
+                f'<div style="background:#e8f5e9;border-radius:8px;padding:10px 14px;margin-bottom:8px;margin-left:auto;max-width:80%;text-align:right;">'
+                f'<div style="font-size:11px;color:#666;margin-bottom:4px;">{status_icon} {sent_by} — {reply.sent_at:%d.%m.%Y %H:%M}</div>'
+                f'<div style="text-align:left;">{reply.text}</div>'
+                f'{"<div style=font-size:11px;color:red;>Ошибка: " + reply.error_message + "</div>" if reply.error_message else ""}'
+                f'</div>'
+            )
+        
+        return format_html('<div style="max-width:600px;">{}</div>', format_html(''.join(html_parts)))
+    display_dialog.short_description = "💬 Диалог"
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = [
+            ('Отзыв', {
+                'fields': ('source', 'client', 'review', 'rating', 'phone', 'table', 'vk_sender_id', 'vk_message_id')
+            }),
+            ('AI Анализ', {
+                'fields': ('sentiment', 'ai_comment'),
+                'classes': ('collapse',),
+            }),
+        ]
+        # Показываем диалог только для существующих отзывов с ответами
+        if obj and obj.pk and obj.replies.exists():
+            fieldsets.insert(1, ('💬 Диалог', {
+                'fields': ('display_dialog',),
+            }))
+        return fieldsets
 
     def get_queryset(self, request):
         qs = super(admin.ModelAdmin, self).get_queryset(request)
@@ -464,17 +544,7 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
         return qs
 
     def reply_to_review_action(self, request, queryset):
-        initial_count = queryset.count()
-        queryset = queryset.filter(is_replied=False)
-        actual_count = queryset.count()
-
-        if actual_count == 0:
-            if initial_count > 0:
-                self.message_user(request, "На выбранные отзывы уже был дан ответ.", level=messages.WARNING)
-            else:
-                self.message_user(request, "Нет отзывов для ответа.", level=messages.WARNING)
-            return
-
+        """Ответить на отзывы — отправляет ВК сообщение И СОХРАНЯЕТ текст ответа в историю"""
         if 'apply' in request.POST:
             form = ReplyForm(request.POST)
             if form.is_valid():
@@ -485,23 +555,56 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
 
                 for review in queryset:
                     try:
+                        error_msg = None
+                        sent_ok = False
+                        
                         if review.client:
-                            service.send_message(review.client, text)
-                            review.is_replied = True
-                            review.save(update_fields=['is_replied'])
+                            try:
+                                service.send_message(review.client, text, template_type='review_reply')
+                                sent_ok = True
+                            except Exception as e:
+                                error_msg = str(e)
+                        else:
+                            error_msg = "Клиент не привязан к отзыву"
+                        
+                        # Сохраняем ответ в историю ВСЕГДА
+                        TestimonialReply.objects.create(
+                            testimonial=review,
+                            text=text,
+                            sent_by=request.user,
+                            is_sent_successfully=sent_ok,
+                            error_message=error_msg
+                        )
+                        
+                        # Обновляем флаг
+                        review.is_replied = True
+                        review.save(update_fields=['is_replied'])
+                        
+                        if sent_ok:
                             success_count += 1
                         else:
                             error_count += 1
-                    except Exception:
+                    except Exception as e:
                         error_count += 1
+                        # Даже при ошибке пишем в историю
+                        try:
+                            TestimonialReply.objects.create(
+                                testimonial=review,
+                                text=text,
+                                sent_by=request.user,
+                                is_sent_successfully=False,
+                                error_message=str(e)
+                            )
+                        except Exception:
+                            pass
 
                 if success_count > 0:
-                    self.message_user(request, f"Ответ отправлен на {success_count} отзывов.")
+                    self.message_user(request, f"✅ Ответ отправлен на {success_count} отзывов.")
                 if error_count > 0:
                     self.message_user(
                         request,
-                        f"Не удалось отправить на {error_count} отзывов.",
-                        level=messages.ERROR
+                        f"❌ Не удалось отправить на {error_count} отзывов (ответы сохранены в историю).",
+                        level=messages.WARNING
                     )
                 return redirect(request.get_full_path())
         else:
@@ -510,10 +613,10 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
         return render(request, 'admin/reply_form.html', {
             'items': queryset,
             'form': form,
-            'title': f'Ответ на {actual_count} отзыв(ов)'
+            'title': f'Ответ на {queryset.count()} отзыв(ов)'
         })
 
-    reply_to_review_action.short_description = "Ответить на отзыв (VK)"
+    reply_to_review_action.short_description = "💬 Ответить на отзыв (VK)"
 
 
 # ─── ClientBranchVisit ────────────────────────────────────────
@@ -557,3 +660,4 @@ tenant_admin.register(BranchTestimonials, BranchTestimonialsAdmin)
 tenant_admin.register(ClientBranchVisit, ClientBranchVisitAdmin)
 tenant_admin.register(Promotions, PromotionsAdmin)
 tenant_admin.register(DailyCode, BirthdayDailyCodeAdmin)
+# TestimonialReply управляется через inline в BranchTestimonialsAdmin — отдельная регистрация не нужна

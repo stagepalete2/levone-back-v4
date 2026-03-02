@@ -122,7 +122,21 @@ class MessageLog(TimeStampedModel):
         ordering = ['-sent_at']
 
     def __str__(self):
-        return f'{self.client} - {self.campaign}'
+        if self.template_type:
+            type_map = dict([
+                ('post_game', 'После игры'),
+                ('birthday_today', 'ДР сегодня'),
+                ('birthday_7days', 'ДР через 7 дней'),
+                ('birthday_1day', 'ДР через 1 день'),
+                ('welcome', 'Приветствие'),
+                ('referral_reward', 'Реферал'),
+                ('prize_reminder', 'Напоминание о призах'),
+                ('review_reply', 'Ответ на отзыв'),
+            ])
+            return f'{self.client} — 🤖 {type_map.get(self.template_type, self.template_type)}'
+        elif self.campaign:
+            return f'{self.client} — 📢 {self.campaign}'
+        return f'{self.client} — сообщение'
 
 
 class MessageTemplate(TimeStampedModel):

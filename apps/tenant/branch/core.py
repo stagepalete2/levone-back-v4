@@ -306,15 +306,15 @@ class ReviewService:
 	
 	@staticmethod
 	def create_review_from_vk(branch, text, vk_user_id, client_branch=None, vk_message_id=None):
-		# ... (код создания testimonial остается) ...
+		"""Создание отзыва/обращения из ЛС ВК группы. Оценка (rating) не ставится — она только из приложения."""
 		testimonial = BranchTestimonials.objects.create(
 			client=client_branch,
 			vk_sender_id=str(vk_user_id),
 			vk_message_id=vk_message_id,
 			review=text,
-			rating=0,
+			rating=None,
 			source=BranchTestimonials.Source.VK_MESSAGE,
-			table=0
+			table=None
 		)
 		
 		from apps.tenant.branch.tasks import process_ai_review
@@ -345,9 +345,22 @@ class ReviewService:
 		else:
 			full_name = f"VK ID: {testimonial.vk_sender_id}" # Fallback
 		
-		if testimonial.rating < 5:
+		# Формируем сообщение с учётом источника
+		is_vk = testimonial.source == BranchTestimonials.Source.VK_MESSAGE
+		rating = testimonial.rating
+		
+		if is_vk:
+			# Обращение из ВК — без оценки
 			message = (
-				f'❗️❗️❗️ ВНИМАНИЕ ❗️❗️❗️ Отзыв с оценкой {testimonial.rating}/5 {"⭐️" * testimonial.rating} !!!\n\n'
+				f'💬 Новое обращение из ВК!\n\n'
+				f'👤 Имя: {full_name}\n'
+				f'🏠 Кафе: {branch.name}\n'
+				f'🕒 Время: {timestamp}\n\n'
+				f'📝 Сообщение:\n{testimonial.review}'
+			)
+		elif rating is not None and rating < 5:
+			message = (
+				f'❗️❗️❗️ ВНИМАНИЕ ❗️❗️❗️ Отзыв с оценкой {rating}/5 {"⭐️" * rating} !!!\n\n'
 				f'👤 Имя: {full_name}\n'
 				f'📱 Телефон: {testimonial.phone}\n'
 				f'🏠 Кафе: {branch.name}\n'
@@ -357,8 +370,9 @@ class ReviewService:
 				f'⚠️ Требуется обратная связь с клиентом!'
 			)
 		else:
+			stars = "⭐️" * (rating if rating else 0)
 			message = (
-				f'📢 Новый отзыв! {"⭐️" * testimonial.rating}\n\n'
+				f'📢 Новый отзыв! {stars}\n\n'
 				f'👤 Имя: {full_name}\n'
 				f'📱 Телефон: {testimonial.phone}\n'
 				f'🏠 Кафе: {branch.name}\n'

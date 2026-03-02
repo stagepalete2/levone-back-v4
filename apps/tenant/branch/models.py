@@ -338,7 +338,8 @@ class BranchTestimonials(TimeStampedModel):
     vk_sender_id = models.CharField("VK ID отправителя", max_length=50, blank=True, null=True)
     vk_message_id = models.CharField("VK ID сообщения", max_length=50, blank=True, null=True, unique=True)
     
-    rating = models.PositiveIntegerField(default=5, verbose_name='Оценка (из приложения)')
+    rating = models.PositiveIntegerField(null=True, blank=True, verbose_name='Оценка (только из приложения)',
+                                         help_text='Оценка ставится только через приложение. Для обращений из ВК — пусто.')
     phone = models.CharField(max_length=20, null=True, blank=True, verbose_name='Номер Телефона')
     table = models.PositiveIntegerField(verbose_name='Столик', null=True, blank=True)
     
@@ -363,6 +364,37 @@ class BranchTestimonials(TimeStampedModel):
     class Meta:
         verbose_name = 'Отзыв / Обращение'
         verbose_name_plural = 'Отзывы и Обращения'
+
+
+class TestimonialReply(TimeStampedModel):
+    """
+    История ответов на отзывы/обращения.
+    Позволяет видеть все ответы как диалог.
+    """
+    testimonial = models.ForeignKey(
+        BranchTestimonials,
+        on_delete=models.CASCADE,
+        related_name='replies',
+        verbose_name='Отзыв'
+    )
+    text = models.TextField(verbose_name='Текст ответа')
+    sent_at = models.DateTimeField(auto_now_add=True, verbose_name='Время отправки')
+    sent_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        verbose_name='Отправил'
+    )
+    is_sent_successfully = models.BooleanField(default=True, verbose_name='Успешно отправлено')
+    error_message = models.TextField(blank=True, null=True, verbose_name='Ошибка')
+
+    class Meta:
+        verbose_name = 'Ответ на отзыв'
+        verbose_name_plural = 'Ответы на отзывы'
+        ordering = ['sent_at']
+
+    def __str__(self):
+        return f'Ответ на "{self.testimonial.review[:30]}..." от {self.sent_at:%d.%m.%Y %H:%M}'
 
 
 class ClientBranchVisit(TimeStampedModel):
