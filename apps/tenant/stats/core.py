@@ -259,25 +259,41 @@ class GeneralStatsService:
         if branch_id:
             _sp_filters &= Q(client__branch_id=branch_id)
         _sp_ids = _SP.objects.filter(_sp_filters).values_list('client_id', flat=True)
-        super_prize_new = base_qs.filter(id__in=_sp_ids, joined_community_via_app=True).distinct().count()
+        # Новые: подписались на сообщество И/ИЛИ рассылку ЧЕРЕЗ приложение + получили первый подарок
+        super_prize_new = base_qs.filter(
+            id__in=_sp_ids
+        ).filter(
+            Q(joined_community_via_app=True) | Q(allowed_message_via_app=True)
+        ).distinct().count()
 
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
+        # Считаем «возврат» как игру в ДРУГОЙ день (не в тот же визит).
+        # Игра сразу после публикации сторис (в тот же день) НЕ считается повторным визитом.
+        from django.db.models.functions import TruncDate
         clients_returned = ClientAttempt.objects.filter(
             **attempt_filters
-        ).values("client").annotate(
-            cnt=Count("id")
-        ).filter(cnt__gte=2).count()
+        ).annotate(
+            play_date=TruncDate('created_at')
+        ).values("client", "play_date").distinct().values("client").annotate(
+            days_cnt=Count("play_date", distinct=True)
+        ).filter(days_cnt__gte=2).count()
 
         expense_filter = Q(transactions__type="EXPENSE")
         if date_from:
             expense_filter &= Q(transactions__created_at__gte=date_from)
         bought_prizes = base_qs.filter(expense_filter).values("client").distinct().count()
 
-        posted_story = period_qs.filter(is_story_uploaded=True).values("client").distinct().count()
+        # Фильтр по дате ПУБЛИКАЦИИ сторис, а не по дате регистрации
+        story_filter = Q(is_story_uploaded=True, story_uploaded_at__isnull=False)
+        if date_from:
+            story_filter &= Q(story_uploaded_at__gte=date_from)
+        if date_to:
+            story_filter &= Q(story_uploaded_at__lte=date_to)
+        posted_story = base_qs.filter(story_filter).values("client").distinct().count()
 
         referral = all_period_qs.filter(invited_by__isnull=False).values("client").distinct().count()
 
@@ -289,7 +305,7 @@ class GeneralStatsService:
 
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
-            campaign__title__icontains="День Рождения",
+            template_type='birthday_today',
         ).count()
 
         try:
@@ -311,8 +327,8 @@ class GeneralStatsService:
             community_qs = community_qs.filter(branch_id=branch_id)
 
         # Общее количество гостей в рассылке (ВСЕ ВРЕМЯ, не за период)
-        # Это те, кто разрешил получать сообщения — is_allowed_message=True
-        total_mailing_qs = all_qs.filter(is_allowed_message=True)
+        # Только те, кто разрешил рассылку ЧЕРЕЗ наше приложение
+        total_mailing_qs = all_qs.filter(allowed_message_via_app=True)
         total_mailing_subscribers = total_mailing_qs.values("client").distinct().count()
 
         # Подписались в сообщество ВК ЗА ПЕРИОД — ИМЕННО через приложение
