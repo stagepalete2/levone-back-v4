@@ -14,7 +14,7 @@ app.autodiscover_tasks()
 
 # timezone-safe
 app.conf.enable_utc = False
-app.conf.timezone = os.getenv('TZ')
+app.conf.timezone = os.getenv('TZ', 'Europe/Moscow')
 
 app.conf.beat_schedule = {
 	'daily-birthday-campaign-check': {
@@ -45,6 +45,11 @@ app.conf.beat_schedule = {
     "dayly-rfm-analysis": {
         "task": "apps.shared.config.tasks.daily_rfm_update",
         "schedule": crontab(minute=0, hour=4),
+    },
+
+    "daily-prize-reminder": {
+        "task": "apps.tenant.senler.tasks.check_prize_reminders_daily",
+        "schedule": crontab(hour=12, minute=0),
     },
 
     
