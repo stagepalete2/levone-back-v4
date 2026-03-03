@@ -410,7 +410,6 @@ class CoinTransactionAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     list_display = ('client', 'type', 'source', 'amount', 'description', 'created_at')
     list_filter = ('type', 'source', 'client__branch')
     search_fields = ('client__client__name', 'client__client__lastname', 'description')
-    readonly_fields = ('client', 'type', 'source', 'amount', 'description', 'created_at')
 
     def get_queryset(self, request):
         qs = super(admin.ModelAdmin, self).get_queryset(request)
