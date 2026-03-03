@@ -1,13 +1,8 @@
 from rest_framework import serializers
 
-from apps.shared.clients.models import Company
-
 class DomainRequestSerializer(serializers.Serializer):
     """Валидация входящих параметров (Query Params)"""
-    company = serializers.PrimaryKeyRelatedField(
-        queryset=Company.objects.all(),
-        required=True
-    )
+    company = serializers.IntegerField(required=True)
 
 class DomainResponseSerializer(serializers.Serializer):
     """Формирование красивого ответа"""

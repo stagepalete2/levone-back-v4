@@ -20,15 +20,12 @@ logger = logging.getLogger(__name__)
 
 class GetDomain(APIView):
     def get(self, request):
-        data = request.query_params.copy()
-        data['company'] = int(data['company']) + 1
-
-        input_serializer = DomainRequestSerializer(data=data)
+        input_serializer = DomainRequestSerializer(data=request.query_params)
         input_serializer.is_valid(raise_exception=True)
-        company_id = input_serializer.validated_data['company']
+        client_id = input_serializer.validated_data['company']
 
         try:
-            domain_obj = CompanyDomainService.get_company_domain(company_id)
+            domain_obj = CompanyDomainService.get_company_domain_by_client_id(client_id)
             output_serializer = DomainResponseSerializer(domain_obj)
             return Response(output_serializer.data, status=status.HTTP_200_OK)
 
