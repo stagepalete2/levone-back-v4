@@ -330,7 +330,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         исключаем реферальных (client__invited_by__isnull=True).
         """
         from apps.tenant.branch.models import ClientBranchVisit
-        visit_filters = Q(client__invited_by__isnull=True)
+        visit_filters = Q(
+            client__invited_by__isnull=True,
+            client__joined_community_via_app=True,
+            client__allowed_message_via_app=True,
+        )
         if date_from:
             visit_filters &= Q(visited_at__gte=date_from)
         if date_to:
@@ -350,7 +354,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         log_filters = Q(
             status='sent',
             client__invited_by__isnull=True,
-            campaign__title__icontains='День Рождения',
+            template_type='birthday_today',
         )
         if date_from:
             log_filters &= Q(sent_at__gte=date_from)

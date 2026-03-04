@@ -121,7 +121,11 @@ class GeneralStatsService:
         qr_scans_today = 0
         try:
             from apps.tenant.branch.models import ClientBranchVisit
-            qr_visits_filter = Q(client__invited_by__isnull=True)
+            qr_visits_filter = Q(
+                client__invited_by__isnull=True,
+                client__joined_community_via_app=True,
+                client__allowed_message_via_app=True,
+            )
             if date_from:
                 qr_visits_filter &= Q(visited_at__gte=date_from)
             if date_to:
