@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, F, Q
 from datetime import timedelta
 import json
+import logging
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -22,6 +23,8 @@ from apps.tenant.game.models import ClientAttempt
 from apps.tenant.stats.core import GeneralStatsService, RFAnalyticsService, RFMigrationService, VKIntegrationService, RFManagementService, RFGuestService
 from apps.tenant.stats.serializers import MigrationFilterSerializer, RFRecalculateSerializer, RFSettingsUpdateSerializer, RFGuestListSerializer
 from apps.tenant.stats.models import RFSegment, RFSettings, GuestRFScore
+
+logger = logging.getLogger(__name__)
 
 class BaseAdminStatsView(LoginRequiredMixin, UserPassesTestMixin):
     """Базовый класс для проверки прав доступа"""
@@ -392,6 +395,7 @@ class ReviewReplyView(BaseAdminStatsView, View):
             from apps.tenant.senler.services import VKService
             service = VKService()
             if not service.is_configured:
+                logger.warning(f"VKService not configured for this tenant")
                 return JsonResponse({'success': False, 'error': 'VK не настроен'}, status=400)
 
             if review.client:
@@ -622,6 +626,7 @@ class RFSegmentMailingView(APIView):
             from apps.tenant.senler.services import VKService
             service = VKService()
             if not service.is_configured:
+                logger.warning(f"VKService not configured for this tenant, skipping message to {branch.name}")
                 return Response({"success": False, "error": "VK не настроен"}, status=400)
 
             if segment_code == 'all':

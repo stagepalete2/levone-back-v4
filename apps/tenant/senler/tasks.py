@@ -15,24 +15,23 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def schedule_post_game_message(client_branch_id, schema_name):
-    with schema_context(schema_name):
-        now = timezone.localtime()
-        target_time = now + datetime.timedelta(hours=3)
+    now = timezone.localtime()
+    target_time = now + datetime.timedelta(hours=3)
 
-        if target_time.hour >= 21:
-            target_time = target_time + datetime.timedelta(days=1)
-            target_time = target_time.replace(hour=9, minute=0, second=0)
-        elif target_time.hour < 9:
-            target_time = target_time.replace(hour=9, minute=0, second=0)
+    if target_time.hour >= 21:
+        target_time = target_time + datetime.timedelta(days=1)
+        target_time = target_time.replace(hour=9, minute=0, second=0, microsecond=0)
+    elif target_time.hour < 9:
+        target_time = target_time.replace(hour=9, minute=0, second=0, microsecond=0)
 
-        send_single_message.apply_async(
-            args=[client_branch_id, None],
-            eta=target_time,
-            kwargs={
-                'schema_name': schema_name,
-                'template_type': 'post_game'
-            },
-        )
+    send_single_message.apply_async(
+        args=[client_branch_id, None],
+        eta=target_time,
+        kwargs={
+            'schema_name': schema_name,
+            'template_type': 'post_game'
+        },
+    )
 
 
 @shared_task
@@ -160,17 +159,18 @@ def _perform_send_single(client_branch_id, text, attachment, campaign_id, templa
     try:
         cb = ClientBranch.objects.get(id=client_branch_id)
 
-        if template_type and not text:
-            defaults = MessageTemplate.get_defaults()
-            text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))
+        if not cb.is_allowed_message:
+            if template_type and not text:
+                defaults = MessageTemplate.get_defaults()
+                text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))
 
-        if not text:
-            return
+            if not text:
+                return
 
-        campaign = MailingCampaign.objects.get(id=campaign_id) if campaign_id else None
-        service = VKService()
-        if service.is_configured:
-            service.send_message(cb, text, attachment, campaign, template_type=template_type)
+            campaign = MailingCampaign.objects.get(id=campaign_id) if campaign_id else None
+            service = VKService()
+            if service.is_configured:
+                service.send_message(cb, text, attachment, campaign, template_type=template_type)
     except ClientBranch.DoesNotExist:
         pass
 
