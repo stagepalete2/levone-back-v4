@@ -9,7 +9,7 @@ from apps.shared.config.mixins import BranchRestrictedAdminMixin
 from apps.tenant.branch.models import (
     Branch, BranchConfig, TelegramBot, BotAdmin,
     ClientBranch, CoinTransaction, StoryImage,
-    BranchTestimonials, Promotions, ClientBranchVisit, DailyCode
+    BranchTestimonials, TestimonialReply, Promotions, ClientBranchVisit, DailyCode
 )
 
 from apps.tenant.senler.services import VKService
@@ -434,9 +434,22 @@ class ReplyForm(forms.Form):
     text = forms.CharField(widget=forms.Textarea, label="Текст ответа")
 
 
+class TestimonialReplyInline(admin.TabularInline):
+    model = TestimonialReply
+    extra = 0
+    readonly_fields = ('text', 'sent_at', 'sent_by', 'is_sent_successfully', 'error_message')
+    can_delete = False
+    verbose_name = "Ответ"
+    verbose_name_plural = "История ответов"
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     client_branch_field_name = 'client'
     branch_field_name = None
+    change_form_template = 'admin/branch/testimonial_change_form.html'
 
     list_display = (
         'source', 'short_review', 'rating', 'sentiment',
@@ -446,6 +459,7 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     readonly_fields = ('ai_comment', 'vk_sender_id', 'vk_message_id')
     search_fields = ('review', 'phone')
     actions = ['reply_to_review_action']
+    inlines = [TestimonialReplyInline]
 
     def short_review(self, obj):
         return (obj.review[:60] + "...") if obj.review and len(obj.review) > 60 else (obj.review or "-")
@@ -461,6 +475,49 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             if user_branches.exists():
                 return qs.filter(client__branch__in=user_branches)
         return qs
+
+    def response_change(self, request, obj):
+        """Handle the inline reply form submission."""
+        if '_send_reply' in request.POST:
+            reply_text = request.POST.get('reply_text', '').strip()
+            if not reply_text:
+                self.message_user(request, "Текст ответа не может быть пустым.", level=messages.ERROR)
+                return redirect(request.get_full_path())
+            
+            service = VKService()
+            is_sent = False
+            error_msg = None
+            
+            try:
+                if obj.client:
+                    service.send_message(obj.client, reply_text, template_type='review_reply')
+                    is_sent = True
+                elif obj.vk_sender_id:
+                    service.send_message_by_vk_id(int(obj.vk_sender_id), reply_text)
+                    is_sent = True
+                else:
+                    error_msg = "Нет VK ID для отправки"
+            except Exception as e:
+                error_msg = str(e)
+            
+            TestimonialReply.objects.create(
+                testimonial=obj,
+                text=reply_text,
+                sent_by=request.user if request.user.is_authenticated else None,
+                is_sent_successfully=is_sent,
+                error_message=error_msg,
+            )
+            
+            if is_sent:
+                obj.is_replied = True
+                obj.save(update_fields=['is_replied'])
+                self.message_user(request, "✅ Ответ отправлен!")
+            else:
+                self.message_user(request, f"❌ Ошибка: {error_msg}", level=messages.ERROR)
+            
+            return redirect(request.get_full_path())
+        
+        return super().response_change(request, obj)
 
     def reply_to_review_action(self, request, queryset):
         initial_count = queryset.count()
@@ -484,14 +541,35 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
 
                 for review in queryset:
                     try:
+                        is_sent = False
                         if review.client:
-                            service.send_message(review.client, text)
+                            service.send_message(review.client, text, template_type='review_reply')
+                            is_sent = True
+                        elif review.vk_sender_id:
+                            service.send_message_by_vk_id(int(review.vk_sender_id), text)
+                            is_sent = True
+                        
+                        TestimonialReply.objects.create(
+                            testimonial=review,
+                            text=text,
+                            sent_by=request.user if request.user.is_authenticated else None,
+                            is_sent_successfully=is_sent,
+                        )
+                        
+                        if is_sent:
                             review.is_replied = True
                             review.save(update_fields=['is_replied'])
                             success_count += 1
                         else:
                             error_count += 1
-                    except Exception:
+                    except Exception as e:
+                        TestimonialReply.objects.create(
+                            testimonial=review,
+                            text=text,
+                            sent_by=request.user if request.user.is_authenticated else None,
+                            is_sent_successfully=False,
+                            error_message=str(e),
+                        )
                         error_count += 1
 
                 if success_count > 0:

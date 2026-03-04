@@ -1,0 +1,143 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+    .chat-container {
+        max-width: 620px;
+        background: #f0f2f5;
+        border-radius: 12px;
+        padding: 16px 16px 8px;
+        font-family: system-ui, -apple-system, sans-serif;
+        margin-bottom: 20px;
+    }
+    .chat-bubble {
+        margin-bottom: 12px;
+        display: flex;
+        gap: 8px;
+    }
+    .chat-bubble.incoming { justify-content: flex-start; }
+    .chat-bubble.outgoing { justify-content: flex-end; }
+    .chat-avatar {
+        width: 32px; height: 32px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; flex-shrink: 0; color: white; font-weight: 700;
+    }
+    .chat-avatar.client { background: #4a76a8; }
+    .chat-avatar.admin  { background: #28a745; }
+    .chat-content { max-width: 450px; }
+    .chat-meta {
+        font-size: 11px; color: #65676b; margin-bottom: 2px;
+    }
+    .chat-bubble.outgoing .chat-meta { text-align: right; }
+    .chat-text-incoming {
+        background: white; border-radius: 0 12px 12px 12px;
+        padding: 10px 14px; display: inline-block;
+        word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        white-space: pre-wrap;
+    }
+    .chat-text-outgoing {
+        background: #0084ff; color: white;
+        border-radius: 12px 0 12px 12px;
+        padding: 10px 14px; display: inline-block;
+        word-wrap: break-word; text-align: left;
+        white-space: pre-wrap;
+    }
+    .chat-error { font-size: 10px; color: #e74c3c; margin-top: 2px; }
+
+    .reply-box {
+        max-width: 620px;
+        background: #fff;
+        border: 2px solid #4a76a8;
+        border-radius: 12px;
+        padding: 16px;
+        margin: 16px 0 24px;
+    }
+    .reply-box h3 {
+        margin: 0 0 10px; font-size: 15px; color: #1B2838;
+    }
+    .reply-box textarea {
+        width: 100%; min-height: 100px; border: 1px solid #ddd;
+        border-radius: 8px; padding: 10px; font-size: 14px;
+        font-family: inherit; resize: vertical;
+        transition: border-color .2s;
+    }
+    .reply-box textarea:focus {
+        outline: none; border-color: #4a76a8;
+    }
+    .reply-box button {
+        margin-top: 10px; background: #4a76a8; color: white;
+        border: none; border-radius: 8px; padding: 10px 24px;
+        font-size: 14px; font-weight: 700; cursor: pointer;
+        transition: background .15s;
+    }
+    .reply-box button:hover { background: #3b6590; }
+    .ai-section { margin-top: 10px; }
+    .ai-section button {
+        background: #264b5d; font-size: 13px; padding: 8px 16px;
+    }
+    .ai-section button:hover { background: #1a3642; }
+</style>
+{% endblock %}
+
+{% block after_related_objects %}
+{{ block.super }}
+
+{% if original and original.source == 'VK_MESSAGE' %}
+<div style="margin: 20px 0;">
+    <h2 style="font-size: 18px; color: #1B2838; margin-bottom: 12px;">
+        💬 Диалог с клиентом
+    </h2>
+
+    <div class="chat-container">
+        {# Incoming message from VK user #}
+        <div class="chat-bubble incoming">
+            <div class="chat-avatar client">👤</div>
+            <div class="chat-content">
+                <div class="chat-meta">
+                    {% if original.client and original.client.client %}
+                        {{ original.client.client.name }} {{ original.client.client.lastname }}
+                    {% elif original.vk_sender_id %}
+                        VK ID: {{ original.vk_sender_id }}
+                    {% else %}
+                        Клиент
+                    {% endif %}
+                    · {{ original.created_at|date:"d.m.Y H:i" }}
+                </div>
+                <div class="chat-text-incoming">{{ original.review }}</div>
+            </div>
+        </div>
+
+        {# Outgoing replies #}
+        {% for reply in original.replies.all %}
+        <div class="chat-bubble outgoing">
+            <div class="chat-content">
+                <div class="chat-meta">
+                    {% if reply.is_sent_successfully %}✅{% else %}❌{% endif %}
+                    {% if reply.sent_by %}{{ reply.sent_by.get_full_name|default:"Администратор" }}{% else %}Администратор{% endif %}
+                    · {{ reply.sent_at|date:"d.m.Y H:i" }}
+                </div>
+                <div class="chat-text-outgoing">{{ reply.text }}</div>
+                {% if reply.error_message %}
+                <div class="chat-error">Ошибка: {{ reply.error_message }}</div>
+                {% endif %}
+            </div>
+            <div class="chat-avatar admin">📤</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {# Reply box #}
+    <div class="reply-box">
+        <h3>✍️ Ответить клиенту</h3>
+        <form method="post" action="">
+            {% csrf_token %}
+            <textarea name="reply_text" placeholder="Введите текст ответа..."></textarea>
+            <div>
+                <button type="submit" name="_send_reply" value="1">💬 Отправить ответ в ВК</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

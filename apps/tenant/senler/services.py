@@ -18,7 +18,7 @@ class VKService:
             self.vk_session = vk_api.VkApi(token=self.config.raw_token, api_version='5.131')
             self.vk = self.vk_session.get_api()
 
-    def send_batch_messages(self, client_branches, text, attachment=None, campaign=None):
+    def send_batch_messages(self, client_branches, text, attachment=None, campaign=None, template_type=None):
         """
         Автоматически выбирает стратегию отправки:
         1. Если в тексте есть {name} — использует метод execute (лимит 20).
@@ -43,11 +43,11 @@ class VKService:
         for i in range(0, len(valid_clients), chunk_size):
             chunk = valid_clients[i:i + chunk_size]
             if need_personalization:
-                self._process_chunk_personalized(chunk, text, attachment, campaign)
+                self._process_chunk_personalized(chunk, text, attachment, campaign, template_type)
             else:
-                self._process_chunk_standard(chunk, text, attachment, campaign)
+                self._process_chunk_standard(chunk, text, attachment, campaign, template_type)
 
-    def _process_chunk_standard(self, chunk, text, attachment, campaign):
+    def _process_chunk_standard(self, chunk, text, attachment, campaign, template_type=None):
         """Старый быстрый метод: одинаковый текст для всех (до 100 чел)"""
         user_map = {str(cb.client.vk_user_id): cb for cb in chunk}
         user_ids_str = ",".join(user_map.keys())
@@ -63,12 +63,12 @@ class VKService:
             if isinstance(results, int):
                 results = [{'peer_id': int(uid), 'message_id': results} for uid in user_map.keys()]
             
-            self._save_logs(results, user_map, campaign)
+            self._save_logs(results, user_map, campaign, template_type)
 
         except Exception as e:
-            self._handle_global_error(chunk, campaign, e)
+            self._handle_global_error(chunk, campaign, e, template_type)
 
-    def _process_chunk_personalized(self, chunk, text_template, attachment, campaign):
+    def _process_chunk_personalized(self, chunk, text_template, attachment, campaign, template_type=None):
         """Новый метод: использует VK Script для отправки разных текстов"""
         
         # ИСПРАВЛЕНИЕ: Режем список до 20 (безопасный лимит) вместо 25
@@ -119,18 +119,17 @@ class VKService:
         """
 
         try:
-            print(requests_data)
             results = self.vk.execute(
                 code=code,
                 data=json.dumps(requests_data, ensure_ascii=False),
                 attachment=attachment
             )
-            self._save_logs(results, user_map, campaign)
+            self._save_logs(results, user_map, campaign, template_type)
 
         except Exception as e:
-            self._handle_global_error(safe_chunk, campaign, e)
+            self._handle_global_error(safe_chunk, campaign, e, template_type)
 
-    def _save_logs(self, results, user_map, campaign):
+    def _save_logs(self, results, user_map, campaign, template_type=None):
         """Сохранение логов в БД"""
         logs_to_create = []
         
@@ -169,6 +168,7 @@ class VKService:
             logs_to_create.append(MessageLog(
                 campaign=campaign,
                 client=client_obj,
+                template_type=template_type,
                 status=status,
                 error_message=error_msg,
                 vk_message_id=vk_msg_id
@@ -177,12 +177,13 @@ class VKService:
         if logs_to_create:
             MessageLog.objects.bulk_create(logs_to_create)
 
-    def _handle_global_error(self, chunk, campaign, error):
+    def _handle_global_error(self, chunk, campaign, error, template_type=None):
         logger.error(f"Global VK Error: {error}")
         logs = [
             MessageLog(
                 campaign=campaign, 
-                client=cb, 
+                client=cb,
+                template_type=template_type,
                 status='failed', 
                 error_message=f"Global Exception: {str(error)}"
             )
@@ -190,8 +191,8 @@ class VKService:
         ]
         MessageLog.objects.bulk_create(logs)
 
-    def send_message(self, client_branch, text, attachment=None, campaign=None):
-        self.send_batch_messages([client_branch], text, attachment, campaign)
+    def send_message(self, client_branch, text, attachment=None, campaign=None, template_type=None):
+        self.send_batch_messages([client_branch], text, attachment, campaign, template_type=template_type)
 
     def send_message_by_vk_id(self, vk_user_id: int, text: str, attachment=None):
         """
