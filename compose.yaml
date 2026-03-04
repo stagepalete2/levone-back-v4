@@ -55,12 +55,16 @@ services:
     restart: unless-stopped
     depends_on:
       - redis
+      - db
+    volumes:
+      - ./:/app
     networks:
       - postgres-network
     env_file:
       - .env.dev
     environment:
-      # И СЮДА ТОЖЕ, на всякий случай:
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
   
