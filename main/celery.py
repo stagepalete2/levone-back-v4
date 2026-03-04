@@ -14,7 +14,7 @@ app.autodiscover_tasks()
 
 # timezone-safe
 app.conf.enable_utc = True
-app.conf.timezone = os.getenv('TZ', 'Europe/Moscow')
+app.conf.timezone = 'UTC'
 
 app.conf.beat_schedule = {
 	'daily-birthday-campaign-check': {
