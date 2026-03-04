@@ -333,6 +333,7 @@ class GeneralStatsService:
         sent_greetings = MessageLog.objects.filter(
             msg_filters,
             campaign__title__icontains='День Рождения',
+            template_type='birthday_today'
         ).values('client').distinct().count()
 
         try:
