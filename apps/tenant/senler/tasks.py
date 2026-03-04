@@ -159,7 +159,7 @@ def _perform_send_single(client_branch_id, text, attachment, campaign_id, templa
     try:
         cb = ClientBranch.objects.get(id=client_branch_id)
 
-        if not cb.is_allowed_message:
+        if cb.is_allowed_message:
             if template_type and not text:
                 defaults = MessageTemplate.get_defaults()
                 text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))

@@ -13,7 +13,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 # timezone-safe
-app.conf.enable_utc = False
+app.conf.enable_utc = True
 app.conf.timezone = os.getenv('TZ', 'Europe/Moscow')
 
 app.conf.beat_schedule = {
