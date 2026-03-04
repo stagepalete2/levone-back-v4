@@ -307,7 +307,7 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         return (
             'Новые в группе и рассылке, получившие первый подарок',
             qs.filter(id__in=_sp_ids).filter(
-                Q(joined_community_via_app=True) and Q(allowed_message_via_app=True) and Q(is_joined_community=True) and Q(is_allowed_message=True)
+                Q(joined_community_via_app=True) | Q(allowed_message_via_app=True)
             )
         )
 
