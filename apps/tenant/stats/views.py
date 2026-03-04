@@ -140,10 +140,12 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         date_from = period_ctx['date_from']
         date_to = period_ctx['date_to']
         
+        # Основная выборка — БЕЗ реферальных (из историй)
         qs = ClientBranch.objects.filter(invited_by__isnull=True)
         if branch_ctx.get('selected_branch_id'):
             qs = qs.filter(branch_id=branch_ctx['selected_branch_id'])
 
+        # Фильтрация по периоду (created_at)
         if date_from and date_to:
             period_qs = qs.filter(created_at__gte=date_from, created_at__lte=date_to)
         elif date_from:
@@ -151,20 +153,38 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         else:
             period_qs = qs
 
+        # Отдельный queryset для реферальных (ВСЕ клиенты, включая тех у кого invited_by != null)
+        all_qs = ClientBranch.objects.all()
+        if branch_ctx.get('selected_branch_id'):
+            all_qs = all_qs.filter(branch_id=branch_ctx['selected_branch_id'])
+        if date_from and date_to:
+            all_period_qs = all_qs.filter(created_at__gte=date_from, created_at__lte=date_to)
+        elif date_from:
+            all_period_qs = all_qs.filter(created_at__gte=date_from)
+        else:
+            all_period_qs = all_qs
+
+        # Queryset для историй — фильтруем по story_uploaded_at, а не по created_at
+        story_filter = Q(is_story_uploaded=True, story_uploaded_at__isnull=False)
+        if date_from:
+            story_filter &= Q(story_uploaded_at__gte=date_from)
+        if date_to:
+            story_filter &= Q(story_uploaded_at__lte=date_to)
+
         branch_id = branch_ctx.get('selected_branch_id')
 
         title_map = {
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
             "mailing_subscribers": (
                 'Подписались на рассылку ЧЕРЕЗ приложение',
-                qs.filter(allowed_message_via_app=True)
+                period_qs.filter(allowed_message_via_app=True)
             ),
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
             "group_subscribers": (
                 'Подписались в сообщество ВК ЧЕРЕЗ приложение',
-                qs.filter(joined_community_via_app=True)
+                period_qs.filter(joined_community_via_app=True)
             ),
             "mailing_period": (
                 'Подписались на рассылку ВК ЧЕРЕЗ приложение',
@@ -175,11 +195,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
             "clients_posted_story": (
                 'Опубликовали историй в ВК',
-                period_qs.filter(is_story_uploaded=True)
+                qs.filter(story_filter)
             ),
             "clients_from_referral": (
                 'Перешли из историй ВК',
-                period_qs.filter(invited_by__isnull=False)
+                all_period_qs.filter(invited_by__isnull=False)
             ),
         }
 

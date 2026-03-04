@@ -501,7 +501,7 @@
         </a>
 
         {# 2. Общее количество гостей в рассылке #}
-        <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}" class="stat-card">
+        <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}?{{ period_params }}" class="stat-card">
             <h3>📬 Общее количество гостей в рассылке</h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
