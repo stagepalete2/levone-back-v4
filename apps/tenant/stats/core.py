@@ -121,17 +121,23 @@ class GeneralStatsService:
         qr_scans_today = 0
         try:
             from apps.tenant.branch.models import ClientBranchVisit
-            qr_visits_filter = Q(
-                client__invited_by__isnull=True,
-                client__joined_community_via_app=True,
-                client__allowed_message_via_app=True,
-            )
+            qr_visits_filter = Q(client__invited_by__isnull=True)
             if date_from:
                 qr_visits_filter &= Q(visited_at__gte=date_from)
             if date_to:
                 qr_visits_filter &= Q(visited_at__lte=date_to)
             if branch_id:
                 qr_visits_filter &= Q(client__branch_id=branch_id)
+
+            # Только те, кто подписался на группу ИЛИ на рассылку ИЛИ сыграл в игру
+            from apps.tenant.game.models import ClientAttempt
+            played_ids = ClientAttempt.objects.values_list('client_id', flat=True).distinct()
+            qr_visits_filter &= (
+                Q(client__joined_community_via_app=True) |
+                Q(client__allowed_message_via_app=True) |
+                Q(client_id__in=played_ids)
+            )
+
             qr_scans_today = ClientBranchVisit.objects.filter(qr_visits_filter).count()
         except Exception as exc:
             logger.error("QR scans count error: %s", exc)

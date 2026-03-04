@@ -330,17 +330,22 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         исключаем реферальных (client__invited_by__isnull=True).
         """
         from apps.tenant.branch.models import ClientBranchVisit
-        visit_filters = Q(
-            client__invited_by__isnull=True,
-            client__joined_community_via_app=True,
-            client__allowed_message_via_app=True,
-        )
+        visit_filters = Q(client__invited_by__isnull=True)
         if date_from:
             visit_filters &= Q(visited_at__gte=date_from)
         if date_to:
             visit_filters &= Q(visited_at__lte=date_to)
         if branch_id:
             visit_filters &= Q(client__branch_id=branch_id)
+
+        # Только те, кто подписался на группу ИЛИ на рассылку ИЛИ сыграл в игру
+        played_ids = ClientAttempt.objects.values_list('client_id', flat=True).distinct()
+        visit_filters &= (
+            Q(client__joined_community_via_app=True) |
+            Q(client__allowed_message_via_app=True) |
+            Q(client_id__in=played_ids)
+        )
+
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
         return ('Отсканировали QR-код за период', qs.filter(id__in=scan_ids))
 
