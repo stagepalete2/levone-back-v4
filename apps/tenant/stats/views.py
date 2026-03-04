@@ -175,17 +175,20 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
         title_map = {
             "qr_scans": lambda: self._get_qr_scan_clients(qs, date_from, date_to, branch_id),
+            # mailing_subscribers — ВСЕ ВРЕМЯ (как на дашборде: total_mailing_subscribers)
             "mailing_subscribers": (
                 'Подписались на рассылку ЧЕРЕЗ приложение',
-                period_qs.filter(allowed_message_via_app=True)
+                qs.filter(allowed_message_via_app=True)
             ),
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
+            # group_subscribers — ЗА ПЕРИОД (как на дашборде)
             "group_subscribers": (
                 'Подписались в сообщество ВК ЧЕРЕЗ приложение',
                 period_qs.filter(joined_community_via_app=True)
             ),
+            # mailing_period — ЗА ПЕРИОД (как на дашборде: mailing_subscribers_period)
             "mailing_period": (
                 'Подписались на рассылку ВК ЧЕРЕЗ приложение',
                 period_qs.filter(allowed_message_via_app=True)
@@ -232,6 +235,11 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_returned_clients(qs, date_from, date_to=None, branch_id=None):
+        """
+        Совпадает с dashboard: считаем уникальные ДНИ игры (TruncDate),
+        клиенты с ≥2 уникальных дней, исключая реферальных.
+        """
+        from django.db.models.functions import TruncDate
         attempt_filters = {}
         if date_from:
             attempt_filters['created_at__gte'] = date_from
@@ -239,43 +247,68 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             attempt_filters['created_at__lte'] = date_to
         if branch_id:
             attempt_filters['client__branch_id'] = branch_id
+        # Исключаем реферальных — как на дашборде
+        attempt_filters['client__invited_by__isnull'] = True
+
         repeat_client_ids = ClientAttempt.objects.filter(
             **attempt_filters
-        ).values('client').annotate(
-            attempt_count=Count('id')
-        ).filter(attempt_count__gte=2).values_list('client', flat=True)
+        ).annotate(
+            play_date=TruncDate('created_at')
+        ).values('client', 'play_date').distinct().values('client').annotate(
+            days_cnt=Count('play_date', distinct=True)
+        ).filter(days_cnt__gte=2).values_list('client', flat=True)
         return ('Вернулись и сыграли в игру повторно', qs.filter(id__in=repeat_client_ids))
 
     @staticmethod
     def _get_birthday_clients(qs, date_from, date_to=None, branch_id=None):
-        filters = Q(
-            client__birth_date__isnull=False,
-            created_at__day=F('client__birth_date__day'),
-            created_at__month=F('client__birth_date__month'),
-        )
+        """
+        Совпадает с dashboard: SuperPrize(acquired_from='BIRTHDAY', activated_at__isnull=False).
+        Фильтрует по activated_at, а не по ClientAttempt.
+        """
+        from apps.tenant.inventory.models import SuperPrize
+        bp_filters = Q(acquired_from='BIRTHDAY', activated_at__isnull=False, client__invited_by__isnull=True)
         if date_from:
-            filters &= Q(created_at__gte=date_from)
+            bp_filters &= Q(activated_at__gte=date_from)
         if date_to:
-            filters &= Q(created_at__lte=date_to)
+            bp_filters &= Q(activated_at__lte=date_to)
         if branch_id:
-            filters &= Q(client__branch_id=branch_id)
-        birthday_attempt_ids = ClientAttempt.objects.filter(filters).values_list('client', flat=True)
-        return ('Пришли отметить день рождения', qs.filter(id__in=birthday_attempt_ids))
+            bp_filters &= Q(client__branch_id=branch_id)
+        client_ids = SuperPrize.objects.filter(bp_filters).values_list('client_id', flat=True)
+        return ('Пришли отметить день рождения', qs.filter(id__in=client_ids))
 
     @staticmethod
     def _get_new_prize_clients(qs, date_from, date_to=None, branch_id=None):
+        """
+        Совпадает с dashboard: находим ПЕРВЫЙ SuperPrize(GAME) для каждого клиента,
+        фильтруем по периоду первого приза, затем joined_community_via_app OR allowed_message_via_app.
+        """
         from apps.tenant.inventory.models import SuperPrize
-        prize_filters = Q(acquired_from='GAME')
+        from django.db.models import Min
+
+        # Находим дату ПЕРВОГО суперприза (GAME) для каждого клиента
+        first_prize_dates = SuperPrize.objects.filter(
+            acquired_from='GAME'
+        ).values('client_id').annotate(
+            first_prize_at=Min('created_at')
+        )
+
+        # Фильтруем: первый приз попадает в выбранный период
+        first_in_period = first_prize_dates
         if date_from:
-            prize_filters &= Q(created_at__gte=date_from)
+            first_in_period = first_in_period.filter(first_prize_at__gte=date_from)
         if date_to:
-            prize_filters &= Q(created_at__lte=date_to)
+            first_in_period = first_in_period.filter(first_prize_at__lte=date_to)
         if branch_id:
-            prize_filters &= Q(client__branch_id=branch_id)
-        client_ids = SuperPrize.objects.filter(prize_filters).values_list('client_id', flat=True)
+            first_in_period = first_in_period.filter(client__branch_id=branch_id)
+
+        _sp_ids = first_in_period.values_list('client_id', flat=True)
+
+        # joined_community_via_app OR allowed_message_via_app — как на дашборде
         return (
             'Новые в группе и рассылке, получившие первый подарок',
-            qs.filter(id__in=client_ids, joined_community_via_app=True)
+            qs.filter(id__in=_sp_ids).filter(
+                Q(joined_community_via_app=True) | Q(allowed_message_via_app=True)
+            )
         )
 
     @staticmethod
@@ -292,12 +325,16 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_qr_scan_clients(qs, date_from, date_to=None, branch_id=None):
+        """
+        Совпадает с dashboard: фильтр по visited_at (не created_at),
+        исключаем реферальных (client__invited_by__isnull=True).
+        """
         from apps.tenant.branch.models import ClientBranchVisit
-        visit_filters = Q()
+        visit_filters = Q(client__invited_by__isnull=True)
         if date_from:
-            visit_filters &= Q(created_at__gte=date_from)
+            visit_filters &= Q(visited_at__gte=date_from)
         if date_to:
-            visit_filters &= Q(created_at__lte=date_to)
+            visit_filters &= Q(visited_at__lte=date_to)
         if branch_id:
             visit_filters &= Q(client__branch_id=branch_id)
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
@@ -305,12 +342,20 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_birthday_greeting_clients(qs, date_from, date_to=None, branch_id=None):
+        """
+        Совпадает с dashboard: фильтр по sent_at (не created_at),
+        status='sent', client__invited_by__isnull=True.
+        """
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(campaign__title__icontains="День Рождения")
+        log_filters = Q(
+            status='sent',
+            client__invited_by__isnull=True,
+            campaign__title__icontains='День Рождения',
+        )
         if date_from:
-            log_filters &= Q(created_at__gte=date_from)
+            log_filters &= Q(sent_at__gte=date_from)
         if date_to:
-            log_filters &= Q(created_at__lte=date_to)
+            log_filters &= Q(sent_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
@@ -318,12 +363,16 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
 
     @staticmethod
     def _get_read_message_clients(qs, date_from, date_to=None, branch_id=None):
+        """
+        Совпадает с dashboard: status='sent', is_read=True,
+        фильтр по sent_at, исключаем реферальных.
+        """
         from apps.tenant.senler.models import MessageLog
-        log_filters = Q(is_read=True)
+        log_filters = Q(status='sent', is_read=True, client__invited_by__isnull=True)
         if date_from:
-            log_filters &= Q(created_at__gte=date_from)
+            log_filters &= Q(sent_at__gte=date_from)
         if date_to:
-            log_filters &= Q(created_at__lte=date_to)
+            log_filters &= Q(sent_at__lte=date_to)
         if branch_id:
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
