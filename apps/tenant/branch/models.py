@@ -381,7 +381,7 @@ class TestimonialReply(TimeStampedModel):
     sent_at = models.DateTimeField(auto_now_add=True, verbose_name='Время отправки')
     sent_by = models.ForeignKey(
         'users.User',
-        on_delete=models.SET_NULL,
+        on_delete=models.DO_NOTHING,
         null=True, blank=True,
         verbose_name='Отправил'
     )
