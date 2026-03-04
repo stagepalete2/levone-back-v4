@@ -400,11 +400,11 @@ class ReviewReplyView(BaseAdminStatsView, View):
 
             if review.client:
                 # Стандартный путь: отправляем через client_branch
-                service.send_message(review.client, text)
+                service.send_message(review.client, text, template_type='review_reply')
             elif review.vk_sender_id:
                 # Клиент не зарегистрирован в приложении, но VK ID известен — 
                 # отправляем напрямую через VK API
-                service.send_message_by_vk_id(int(review.vk_sender_id), text)
+                service.send_message_by_vk_id(int(review.vk_sender_id), text, template_type='review_reply')
             else:
                 return JsonResponse({'success': False, 'error': 'Невозможно отправить: нет ни клиента, ни VK ID'}, status=400)
 
@@ -650,7 +650,17 @@ class RFSegmentMailingView(APIView):
             if not clients:
                 return Response({"success": False, "error": "Нет получателей"}, status=400)
 
-            service.send_batch_messages(clients, text)
+            # Создаём кампанию для отслеживания в истории отправок
+            from apps.tenant.senler.models import MailingCampaign
+            segment_label = segment_code if segment_code != 'all' else 'Все клиенты'
+            campaign = MailingCampaign.objects.create(
+                title=f"RFM рассылка: {segment_label} ({timezone.now().strftime('%d.%m.%Y %H:%M')})",
+                text=text,
+                status='completed',
+                scheduled_at=timezone.now(),
+            )
+
+            service.send_batch_messages(clients, text, campaign=campaign)
 
             count = len(clients) if isinstance(clients, list) else clients.count()
             return Response({

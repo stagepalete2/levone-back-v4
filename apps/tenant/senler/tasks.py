@@ -161,8 +161,8 @@ def _perform_send_single(client_branch_id, text, attachment, campaign_id, templa
 
         if cb.is_allowed_message:
             if template_type and not text:
-                defaults = MessageTemplate.get_defaults()
-                text = MessageTemplate.get_text(template_type, defaults.get(template_type, ''))
+                # Берём текст ТОЛЬКО из БД. Если шаблон не найден или неактивен — не отправляем.
+                text = MessageTemplate.get_text(template_type, '')
 
             if not text:
                 return

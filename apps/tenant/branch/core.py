@@ -125,20 +125,6 @@ class ClientService:
 			client_branch.birth_date = data['birth_date']
 			client_branch.save(update_fields=['birth_date'])
 		
-		# Отправляем приветственное сообщение при ПЕРВОМ создании профиля
-		if cb_created:
-			try:
-				from apps.tenant.senler.tasks import send_single_message
-				send_single_message.delay(
-					client_branch_id=client_branch.id,
-					text=None,
-					schema_name=connection.schema_name,
-					template_type='welcome'
-				)
-			except Exception as e:
-				import logging
-				logging.getLogger(__name__).warning(f"Welcome message scheduling failed for {vk_user_id}: {e}")
-		
 		return client_branch
 
 	@staticmethod

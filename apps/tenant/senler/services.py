@@ -194,23 +194,43 @@ class VKService:
     def send_message(self, client_branch, text, attachment=None, campaign=None, template_type=None):
         self.send_batch_messages([client_branch], text, attachment, campaign, template_type=template_type)
 
-    def send_message_by_vk_id(self, vk_user_id: int, text: str, attachment=None):
+    def send_message_by_vk_id(self, vk_user_id: int, text: str, attachment=None, client_branch=None, campaign=None, template_type=None):
         """
         Отправляет сообщение напрямую по VK ID (без привязки к ClientBranch).
         Используется для ответа на отзывы от незарегистрированных пользователей.
+        Теперь также создаёт запись в MessageLog если client_branch передан.
         """
         if not self.is_configured:
             raise Exception("VK не настроен")
 
         try:
-            self.vk.messages.send(
+            result = self.vk.messages.send(
                 user_id=vk_user_id,
                 message=text,
                 attachment=attachment,
                 random_id=get_random_id()
             )
+            # Логируем если есть client_branch
+            if client_branch:
+                vk_msg_id = result if isinstance(result, int) else None
+                MessageLog.objects.create(
+                    campaign=campaign,
+                    client=client_branch,
+                    template_type=template_type,
+                    status='sent',
+                    vk_message_id=vk_msg_id,
+                )
         except Exception as e:
             logger.error(f"Error sending message to VK ID {vk_user_id}: {e}")
+            # Логируем ошибку если есть client_branch
+            if client_branch:
+                MessageLog.objects.create(
+                    campaign=campaign,
+                    client=client_branch,
+                    template_type=template_type,
+                    status='failed',
+                    error_message=str(e),
+                )
             raise
 
     def upload_image_to_vk(self, file_path, peer_id=0):

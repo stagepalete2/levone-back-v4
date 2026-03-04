@@ -149,7 +149,6 @@ class MessageTemplate(TimeStampedModel):
         ('birthday_today', 'ДР сегодня'),
         ('birthday_7days', 'ДР через 7 дней'),
         ('birthday_1day', 'ДР через 1 день'),
-        ('welcome', 'Приветственное сообщение'),
         ('referral_reward', 'Награда за реферала'),
         ('prize_reminder', 'Напоминание о призах'),
     ]
@@ -207,7 +206,6 @@ class MessageTemplate(TimeStampedModel):
                 'Активация подарка только в кафе.'
             ),
             'birthday_1day': 'Завтра праздник! 🎈 Столик забронирован?',
-            'welcome': 'Добро пожаловать! Рады видеть вас в нашей программе лояльности.',
             'referral_reward': 'Спасибо за приглашённого друга! Ваш бонус начислен.',
             'prize_reminder': 'Не забудьте забрать свои призы! Они ждут вас.',
         }

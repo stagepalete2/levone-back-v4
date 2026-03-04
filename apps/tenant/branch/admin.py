@@ -493,7 +493,7 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                     service.send_message(obj.client, reply_text, template_type='review_reply')
                     is_sent = True
                 elif obj.vk_sender_id:
-                    service.send_message_by_vk_id(int(obj.vk_sender_id), reply_text)
+                    service.send_message_by_vk_id(int(obj.vk_sender_id), reply_text, template_type='review_reply')
                     is_sent = True
                 else:
                     error_msg = "Нет VK ID для отправки"
@@ -546,7 +546,7 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                             service.send_message(review.client, text, template_type='review_reply')
                             is_sent = True
                         elif review.vk_sender_id:
-                            service.send_message_by_vk_id(int(review.vk_sender_id), text)
+                            service.send_message_by_vk_id(int(review.vk_sender_id), text, template_type='review_reply')
                             is_sent = True
                         
                         TestimonialReply.objects.create(
