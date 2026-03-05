@@ -455,6 +455,7 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
         'unread_indicator', 'source', 'short_review', 'rating', 'sentiment',
         'is_replied', 'phone', 'table', 'created_at'
     )
+    list_display_links = ('short_review',)
     list_filter = ('source', 'sentiment', 'rating', 'is_replied', 'has_unread', 'client__branch')
     readonly_fields = ('ai_comment', 'vk_sender_id', 'vk_message_id')
     search_fields = ('review', 'phone')
@@ -465,8 +466,8 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     def unread_indicator(self, obj):
         from django.utils.html import format_html
         if obj.has_unread:
-            return format_html('<span style="color:#e74c3c;font-size:18px;" title="Новое сообщение">&#9679;</span>')
-        return ''
+            return format_html('<span style="color:#2ecc71;font-size:18px;" title="Новое сообщение">&#9679;</span>')
+        return format_html('<span style="color:#bdc3c7;font-size:18px;" title="Нет новых">&#9679;</span>')
     unread_indicator.short_description = ''
     unread_indicator.admin_order_field = 'has_unread'
 
