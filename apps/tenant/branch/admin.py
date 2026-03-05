@@ -452,14 +452,23 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
     change_form_template = 'admin/branch/testimonial_change_form.html'
 
     list_display = (
-        'source', 'short_review', 'rating', 'sentiment',
+        'unread_indicator', 'source', 'short_review', 'rating', 'sentiment',
         'is_replied', 'phone', 'table', 'created_at'
     )
-    list_filter = ('source', 'sentiment', 'rating', 'is_replied', 'client__branch')
+    list_filter = ('source', 'sentiment', 'rating', 'is_replied', 'has_unread', 'client__branch')
     readonly_fields = ('ai_comment', 'vk_sender_id', 'vk_message_id')
     search_fields = ('review', 'phone')
+    ordering = ('-has_unread', '-created_at')
     actions = ['reply_to_review_action']
     inlines = [TestimonialReplyInline]
+
+    def unread_indicator(self, obj):
+        from django.utils.html import format_html
+        if obj.has_unread:
+            return format_html('<span style="color:#e74c3c;font-size:18px;" title="Новое сообщение">&#9679;</span>')
+        return ''
+    unread_indicator.short_description = ''
+    unread_indicator.admin_order_field = 'has_unread'
 
     def short_review(self, obj):
         return (obj.review[:60] + "...") if obj.review and len(obj.review) > 60 else (obj.review or "-")
@@ -475,6 +484,11 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
             if user_branches.exists():
                 return qs.filter(client__branch__in=user_branches)
         return qs
+
+    def change_view(self, request, object_id, form_url='', extra_context=None):
+        """Сбрасываем флаг непрочитанных при открытии диалога."""
+        BranchTestimonials.objects.filter(pk=object_id, has_unread=True).update(has_unread=False)
+        return super().change_view(request, object_id, form_url, extra_context)
 
     def response_change(self, request, obj):
         """Handle the inline reply form submission."""

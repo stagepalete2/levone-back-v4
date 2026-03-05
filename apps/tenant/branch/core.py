@@ -284,6 +284,8 @@ class VKFeedbackService:
                         message_type=TestimonialReply.MessageType.VK_MESSAGE,
                         vk_message_id=message_id,
                     )
+                    existing.has_unread = True
+                    existing.save(update_fields=['has_unread'])
                     print(f"[VK Fetch] Added reply to existing dialog #{existing.id} from VK user {sender_id}")
                 else:
                     # Создаём новый диалог
@@ -323,6 +325,8 @@ class ReviewService:
 				direction=TestimonialReply.Direction.INCOMING,
 				message_type=TestimonialReply.MessageType.APP_REVIEW,
 			)
+			existing.has_unread = True
+			existing.save(update_fields=['has_unread'])
 			from apps.tenant.branch.tasks import process_ai_review
 			process_ai_review.delay(existing.id, connection.schema_name)
 			ReviewService._send_telegram_notification(existing, client_branch.branch)

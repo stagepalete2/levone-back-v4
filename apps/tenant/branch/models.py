@@ -357,6 +357,7 @@ class BranchTestimonials(TimeStampedModel):
     ai_comment = models.TextField("Комментарий ИИ", blank=True, null=True, help_text="Почему ИИ принял такое решение")
     
     is_replied = models.BooleanField(default=False, verbose_name="Ответ отправлен")
+    has_unread = models.BooleanField(default=True, verbose_name="Есть непрочитанные")
 
     def __str__(self):
         return f'{self.source}: {self.review[:30]}...'
