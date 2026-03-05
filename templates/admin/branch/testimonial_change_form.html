@@ -5,6 +5,8 @@
 <style>
     .chat-container {
         max-width: 620px;
+        max-height: 500px;
+        overflow-y: auto;
         background: #f0f2f5;
         border-radius: 12px;
         padding: 16px 16px 8px;
@@ -25,6 +27,7 @@
     }
     .chat-avatar.client { background: #4a76a8; }
     .chat-avatar.admin  { background: #28a745; }
+    .chat-avatar.mailing { background: #e67e22; }
     .chat-content { max-width: 450px; }
     .chat-meta {
         font-size: 11px; color: #65676b; margin-bottom: 2px;
@@ -43,7 +46,27 @@
         word-wrap: break-word; text-align: left;
         white-space: pre-wrap;
     }
+    .chat-text-mailing {
+        background: #e67e22; color: white;
+        border-radius: 12px 0 12px 12px;
+        padding: 10px 14px; display: inline-block;
+        word-wrap: break-word; text-align: left;
+        white-space: pre-wrap;
+    }
     .chat-error { font-size: 10px; color: #e74c3c; margin-top: 2px; }
+    .chat-badge {
+        display: inline-block;
+        font-size: 9px;
+        padding: 1px 6px;
+        border-radius: 8px;
+        color: white;
+        margin-left: 4px;
+        vertical-align: middle;
+    }
+    .badge-vk { background: #4a76a8; }
+    .badge-app { background: #28a745; }
+    .badge-mailing { background: #e67e22; }
+    .badge-admin { background: #6c757d; }
 
     .reply-box {
         max-width: 620px;
@@ -65,32 +88,38 @@
     .reply-box textarea:focus {
         outline: none; border-color: #4a76a8;
     }
-    .reply-box button {
-        margin-top: 10px; background: #4a76a8; color: white;
-        border: none; border-radius: 8px; padding: 10px 24px;
+    .reply-buttons {
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .reply-buttons button {
+        border: none; border-radius: 8px; padding: 10px 20px;
         font-size: 14px; font-weight: 700; cursor: pointer;
-        transition: background .15s;
+        transition: background .15s; color: white;
     }
-    .reply-box button:hover { background: #3b6590; }
-    .ai-section { margin-top: 10px; }
-    .ai-section button {
-        background: #264b5d; font-size: 13px; padding: 8px 16px;
-    }
-    .ai-section button:hover { background: #1a3642; }
+    .btn-send { background: #4a76a8; }
+    .btn-send:hover { background: #3b6590; }
+    .btn-ai { background: #264b5d; font-size: 13px; padding: 10px 16px; }
+    .btn-ai:hover { background: #1a3642; }
+    .btn-ai:disabled { opacity: 0.6; cursor: not-allowed; }
+    .ai-loading { display: none; color: #666; font-size: 13px; }
 </style>
 {% endblock %}
 
 {% block after_related_objects %}
 {{ block.super }}
 
-{% if original and original.source == 'VK_MESSAGE' %}
+{% if original %}
 <div style="margin: 20px 0;">
     <h2 style="font-size: 18px; color: #1B2838; margin-bottom: 12px;">
         💬 Диалог с клиентом
     </h2>
 
-    <div class="chat-container">
-        {# Incoming message from VK user #}
+    <div class="chat-container" id="chat-container">
+        {# Первое сообщение — из BranchTestimonials.review #}
         <div class="chat-bubble incoming">
             <div class="chat-avatar client">👤</div>
             <div class="chat-content">
@@ -103,27 +132,68 @@
                         Клиент
                     {% endif %}
                     · {{ original.created_at|date:"d.m.Y H:i" }}
+                    {% if original.source == 'VK_MESSAGE' %}
+                        <span class="chat-badge badge-vk">ВК</span>
+                    {% else %}
+                        <span class="chat-badge badge-app">Приложение</span>
+                    {% endif %}
                 </div>
                 <div class="chat-text-incoming">{{ original.review }}</div>
             </div>
         </div>
 
-        {# Outgoing replies #}
+        {# Все последующие сообщения из TestimonialReply #}
         {% for reply in original.replies.all %}
-        <div class="chat-bubble outgoing">
-            <div class="chat-content">
-                <div class="chat-meta">
-                    {% if reply.is_sent_successfully %}✅{% else %}❌{% endif %}
-                    {% if reply.sent_by %}{{ reply.sent_by.get_full_name|default:"Администратор" }}{% else %}Администратор{% endif %}
-                    · {{ reply.sent_at|date:"d.m.Y H:i" }}
+            {% if reply.direction == 'incoming' %}
+            <div class="chat-bubble incoming">
+                <div class="chat-avatar client">👤</div>
+                <div class="chat-content">
+                    <div class="chat-meta">
+                        {% if original.client and original.client.client %}
+                            {{ original.client.client.name }} {{ original.client.client.lastname }}
+                        {% elif original.vk_sender_id %}
+                            VK ID: {{ original.vk_sender_id }}
+                        {% else %}
+                            Клиент
+                        {% endif %}
+                        · {{ reply.sent_at|date:"d.m.Y H:i" }}
+                        {% if reply.message_type == 'vk_message' %}
+                            <span class="chat-badge badge-vk">ВК</span>
+                        {% elif reply.message_type == 'app_review' %}
+                            <span class="chat-badge badge-app">Приложение</span>
+                        {% endif %}
+                    </div>
+                    <div class="chat-text-incoming">{{ reply.text }}</div>
                 </div>
-                <div class="chat-text-outgoing">{{ reply.text }}</div>
-                {% if reply.error_message %}
-                <div class="chat-error">Ошибка: {{ reply.error_message }}</div>
+            </div>
+            {% else %}
+            <div class="chat-bubble outgoing">
+                <div class="chat-content">
+                    <div class="chat-meta">
+                        {% if reply.message_type == 'mailing' %}
+                            <span class="chat-badge badge-mailing">Рассылка</span>
+                        {% elif reply.message_type == 'admin_reply' %}
+                            {% if reply.is_sent_successfully %}✅{% else %}❌{% endif %}
+                        {% endif %}
+                        {% if reply.sent_by %}{{ reply.sent_by.get_full_name|default:"Администратор" }}{% else %}Система{% endif %}
+                        · {{ reply.sent_at|date:"d.m.Y H:i" }}
+                    </div>
+                    {% if reply.message_type == 'mailing' %}
+                        <div class="chat-text-mailing">{{ reply.text }}</div>
+                    {% else %}
+                        <div class="chat-text-outgoing">{{ reply.text }}</div>
+                    {% endif %}
+                    {% if reply.error_message %}
+                    <div class="chat-error">Ошибка: {{ reply.error_message }}</div>
+                    {% endif %}
+                </div>
+                {% if reply.message_type == 'mailing' %}
+                    <div class="chat-avatar mailing">📢</div>
+                {% else %}
+                    <div class="chat-avatar admin">📤</div>
                 {% endif %}
             </div>
-            <div class="chat-avatar admin">📤</div>
-        </div>
+            {% endif %}
         {% endfor %}
     </div>
 
@@ -132,12 +202,70 @@
         <h3>✍️ Ответить клиенту</h3>
         <form method="post" action="">
             {% csrf_token %}
-            <textarea name="reply_text" placeholder="Введите текст ответа..."></textarea>
-            <div>
-                <button type="submit" name="_send_reply" value="1">💬 Отправить ответ в ВК</button>
+            <textarea id="reply-textarea" name="reply_text" placeholder="Введите текст ответа..."></textarea>
+            <div class="reply-buttons">
+                <button type="submit" name="_send_reply" value="1" class="btn-send">💬 Отправить ответ в ВК</button>
+                <button type="button" id="ai-generate-btn" class="btn-ai">✨ Сгенерировать с ИИ</button>
+                <span class="ai-loading" id="ai-loading">Генерация...</span>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function() {
+    // Автопрокрутка чата вниз
+    var chat = document.getElementById('chat-container');
+    if (chat) {
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    // AI генерация ответа
+    var aiBtn = document.getElementById('ai-generate-btn');
+    var aiLoading = document.getElementById('ai-loading');
+    var textarea = document.getElementById('reply-textarea');
+
+    if (aiBtn && textarea) {
+        aiBtn.addEventListener('click', function() {
+            aiBtn.disabled = true;
+            aiLoading.style.display = 'inline';
+
+            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            var reviewText = "{{ original.review|escapejs }}";
+            var reviewRating = {{ original.rating|default:"0" }};
+            var draftText = textarea.value;
+
+            fetch('/admin-tools/generate-reply/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({
+                    review_text: reviewText,
+                    review_rating: reviewRating,
+                    draft_text: draftText,
+                }),
+            })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                if (data.reply) {
+                    textarea.value = data.reply;
+                } else if (data.error) {
+                    alert('Ошибка: ' + data.error);
+                }
+            })
+            .catch(function(err) {
+                alert('Ошибка связи с AI');
+                console.error(err);
+            })
+            .finally(function() {
+                aiBtn.disabled = false;
+                aiLoading.style.display = 'none';
+            });
+        });
+    }
+})();
+</script>
 {% endif %}
 {% endblock %}
