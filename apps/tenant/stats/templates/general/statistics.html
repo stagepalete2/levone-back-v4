@@ -365,6 +365,82 @@
         0%, 100% { opacity: 1; }
         50% { opacity: 0.2; }
     }
+
+    /* ─── Tooltip Help Icon ─── */
+    .stat-card h3 {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    .help-tooltip-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        flex-shrink: 0;
+        cursor: help;
+    }
+
+    .help-tooltip-wrap .help-icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #e9ecef;
+        color: #888;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        line-height: 1;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .help-tooltip-wrap:hover .help-icon {
+        background: #28a745;
+        color: #fff;
+    }
+
+    .help-tooltip-wrap .help-bubble {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: -8px;
+        width: 320px;
+        padding: 14px 16px;
+        background: #ffffff;
+        color: #333;
+        font-size: 0.78rem;
+        font-weight: 400;
+        line-height: 1.55;
+        text-transform: none;
+        letter-spacing: 0;
+        border-radius: 10px;
+        border: 1px solid #e0e0e0;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        z-index: 1000;
+        pointer-events: none;
+    }
+
+    .help-tooltip-wrap .help-bubble::before {
+        content: '';
+        position: absolute;
+        top: -6px;
+        right: 12px;
+        width: 12px;
+        height: 12px;
+        background: #ffffff;
+        border-left: 1px solid #e0e0e0;
+        border-top: 1px solid #e0e0e0;
+        transform: rotate(45deg);
+    }
+
+    .help-tooltip-wrap:hover .help-bubble {
+        display: block;
+    }
 </style>
 {% endblock %}
 
@@ -490,7 +566,13 @@
 
         {# 1. QR-сканирований за период — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='qr_scans' %}?{{ period_params }}" class="stat-card">
-            <h3>📱 Отсканировали QR-код за период</h3>
+            <h3>
+                <span>📱 Отсканировали QR-код за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько раз гости отсканировали QR-код в заведении за выбранный период. У одного гостя не может быть больше одного сканирования за 6 часов — это защита от случайных повторных сканов. Если гость пришёл утром и вечером — это 2 сканирования.</span>
+                </span>
+            </h3>
             <div class="metric" id="qr-scans-metric">
                 <span class="pos-loading">⏳</span>
             </div>
@@ -502,77 +584,149 @@
 
         {# 2. Общее количество гостей в рассылке #}
         <a href="{% url 'admin-statistics-detail' stat_name='mailing_subscribers' %}?{{ period_params }}" class="stat-card">
-            <h3>📬 Общее количество гостей в рассылке</h3>
+            <h3>
+                <span>📬 Общее количество гостей в рассылке</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько всего уникальных людей подписались на рассылку ВК именно через наше приложение за всё время работы. Эта цифра не зависит от выбранного периода — она всегда показывает общий итог. Те, кто разрешал сообщения до приложения, сюда не попадают.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.mailing_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
         {# 3. Новые в группе и рассылке, получившие первый подарок #}
         <a href="{% url 'admin-statistics-detail' stat_name='new_clients_received_super_prize' %}?{{ period_params }}" class="stat-card">
-            <h3>🎁 Новые в группе и рассылке, получившие первый подарок за период</h3>
+            <h3>
+                <span>🎁 Новые в группе и рассылке, получившие первый подарок за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Гости, которые за выбранный период одновременно выполнили два условия: получили свой самый первый суперприз через игру (раньше никогда не выигрывали) и подписались на группу ВК или разрешили рассылку именно через приложение (не были подписаны заранее).</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.new_clients_received_super_prize|default:0 }}</div>
         </a>
 
         {# 4. Вернулись и сыграли в игру повторно #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_returned_second_time' %}?{{ period_params }}" class="stat-card">
-            <h3>🔄 Вернулись и сыграли в игру повторно за период</h3>
+            <h3>
+                <span>🔄 Вернулись и сыграли в игру повторно за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Гости, которые за выбранный период играли в приложение минимум в два разных календарных дня. Если гость сыграл 10 раз за один день — это один визит. Засчитывается только когда человек ушёл и вернулся в другой день.</span>
+                </span>
+            </h3>
             <div class="metric" style="color: #17a2b8;">{{ stats.clients_returned_second_time|default:0 }}</div>
         </a>
 
         {# 5. Купили подарки за баллы #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_bought_prizes' %}?{{ period_params }}" class="stat-card">
-            <h3>💰 Купили подарки за баллы за период</h3>
+            <h3>
+                <span>💰 Купили подарки за баллы за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько уникальных гостей потратили свои монеты (баллы) в магазине приложения хотя бы один раз за период. Если один гость купил 5 разных призов — он считается один раз.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.clients_bought_prizes|default:0 }}</div>
         </a>
 
         {# 6. Подписались в сообщество ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='group_subscribers' %}?{{ period_params }}" class="stat-card">
-            <h3>📬 Подписались в сообщество ВК за период</h3>
+            <h3>
+                <span>📬 Подписались в сообщество ВК за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько гостей подписались на группу ВК именно через наше приложение за выбранный период. Система при первом входе проверяет через VK API — был ли гость уже подписан. Если был подписан заранее — он не считается.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.group_subscribers|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
         {# 7. Подписались на рассылку ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='mailing_period' %}?{{ period_params }}" class="stat-card">
-            <h3>📨 Подписались на рассылку ВК за период</h3>
+            <h3>
+                <span>📨 Подписались на рассылку ВК за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Аналогично подписке на группу, но про рассылку (разрешение на отправку сообщений от сообщества). Считаются только те, кто разрешил сообщения именно через наше приложение за выбранный период.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.mailing_subscribers_period|default:0 }}</div>
             {% if selected_branch %}<small class="text-muted">Общий показатель (не по точке)</small>{% endif %}
         </a>
 
         {# 8. Отправлено поздравлений с ДР #}
         <a href="{% url 'admin-statistics-detail' stat_name='sent_greetings' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #e91e63 !important;">
-            <h3>🎂 Отправлено поздравлений с ДР за период</h3>
+            <h3>
+                <span>🎂 Отправлено поздравлений с ДР за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько уникальных гостей получили хотя бы одно поздравительное сообщение с днём рождения за период. Система отправляет до трёх сообщений: за 7 дней до ДР, за 1 день и в сам день рождения. Метрика считает людей, а не сообщения.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.sent_greetings|default:0 }}</div>
         </a>
 
         {# 9. Пришли отметить день рождения #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_birthday_qr' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #9c27b0 !important;">
-            <h3>🎁 Пришли отметить день рождения за период</h3>
+            <h3>
+                <span>🎁 Пришли отметить день рождения за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько уникальных гостей реально пришли в заведение, ввели код дня у персонала и активировали свой подарок ко дню рождения. Без ввода кода подарок не активируется — значит эти люди точно были в заведении физически.</span>
+                </span>
+            </h3>
             <div class="metric" style="color: #9c27b0;">{{ stats.activated_birthday_prizes|default:0 }}</div>
         </a>
 
         {# 10. % открываемости сообщений в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='open_rate' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #00bcd4 !important;">
-            <h3>📊 % открываемости сообщений в ВК за период</h3>
+            <h3>
+                <span>📊 % открываемости сообщений в ВК за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Какой процент от всех отправленных сообщений был прочитан гостями за период. Формула: прочитанные ÷ отправленные × 100%. Статус «прочитано» обновляется через VK API каждые 2 минуты, поэтому свежие рассылки могут показывать заниженный процент.</span>
+                </span>
+            </h3>
             <div class="metric" style="color: #00bcd4;">{{ stats.open_rate|floatformat:0|default:0 }}%</div>
             <small class="text-muted">Прочитано / Доставлено</small>
         </a>
 
         {# 11. Опубликовали историй в ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_posted_story' %}?{{ period_params }}" class="stat-card">
-            <h3>📖 Опубликовали историй в ВК за период</h3>
+            <h3>
+                <span>📖 Опубликовали историй в ВК за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько уникальных гостей опубликовали сторис (историю) в ВК через приложение за выбранный период. Фильтр идёт по дате публикации — если гость зарегистрировался месяц назад, но сторис опубликовал сегодня, он попадёт в метрику за сегодня.</span>
+                </span>
+            </h3>
             <div class="metric" style="color: #dc3545;">{{ stats.clients_posted_story|default:0 }}</div>
         </a>
 
         {# 12. Перешли из историй ВК #}
         <a href="{% url 'admin-statistics-detail' stat_name='clients_from_referral' %}?{{ period_params }}" class="stat-card">
-            <h3>➡️ Перешли из историй ВК за период</h3>
+            <h3>
+                <span>➡️ Перешли из историй ВК за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Сколько новых гостей пришли по реферальной ссылке из сторис других гостей и зарегистрировались за период. Гость А опубликовал сторис со ссылкой → гость Б перешёл по ней и зарегистрировался → гость Б попадает в эту метрику.</span>
+                </span>
+            </h3>
             <div class="metric">{{ stats.clients_from_referral|default:0 }}</div>
         </a>
 
         {# 13. Гостей по POS-системе — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='pos_guests' %}?{{ period_params }}" class="stat-card">
-            <h3>👥 Гостей по POS-системе за период</h3>
+            <h3>
+                <span>👥 Гостей по POS-системе за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">Количество гостей из кассовой системы (IIKO или Dooglys) за период. Это реальное количество посетителей заведения по данным кассы. Данные подгружаются из внешних систем и могут приходить с небольшой задержкой.</span>
+                </span>
+            </h3>
             <div class="metric" id="pos-guests-metric">
                 <span class="pos-loading">⏳</span>
             </div>
@@ -581,7 +735,13 @@
 
         {# 14. Индекс сканирования — данные грузятся через AJAX #}
         <a href="{% url 'admin-statistics-detail' stat_name='scan_index' %}?{{ period_params }}" class="stat-card" style="border-left: 4px solid #6f42c1 !important;">
-            <h3>🔄 Индекс сканирования за период</h3>
+            <h3>
+                <span>🔄 Индекс сканирования за период</span>
+                <span class="help-tooltip-wrap" onclick="event.preventDefault(); event.stopPropagation();">
+                    <span class="help-icon">?</span>
+                    <span class="help-bubble">QR-сканирования ÷ гости POS-системы × 100%. Показывает, какую долю реальных гостей заведения удалось оцифровать через приложение.</span>
+                </span>
+            </h3>
             <div class="metric" style="color: #6f42c1;" id="scan-index-metric">
                 <span class="pos-loading">⏳</span>
             </div>

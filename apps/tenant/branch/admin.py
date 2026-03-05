@@ -437,10 +437,12 @@ class ReplyForm(forms.Form):
 class TestimonialReplyInline(admin.TabularInline):
     model = TestimonialReply
     extra = 0
-    readonly_fields = ('text', 'sent_at', 'sent_by', 'direction', 'message_type', 'is_sent_successfully', 'error_message')
+    readonly_fields = ('direction', 'message_type', 'text', 'sent_by', 'sent_at', 'is_sent_successfully')
+    exclude = ('vk_message_id', 'error_message')
     can_delete = False
     verbose_name = "Сообщение"
     verbose_name_plural = "История диалога"
+    classes = ('collapse',)
 
     def has_add_permission(self, request, obj=None):
         return False
