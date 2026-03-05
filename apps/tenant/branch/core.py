@@ -221,21 +221,24 @@ class VKFeedbackService:
     @staticmethod
     def fetch_unread_messages(branch):
         """Получает непрочитанные сообщения из ЛС сообщества"""
-        config = VKConnection.objects.first() # Предполагаем связь с branch
+        config = VKConnection.objects.first()
         if not config or not config.access_token:
+            print(f"[VK Fetch] No VKConnection or no access_token for branch {branch}")
             return
 
         vk_session = vk_api.VkApi(token=config.raw_token, api_version='5.131')
         vk = vk_session.get_api()
 
         try:
-            # Получаем непрочитанные диалоги
             conversations = vk.messages.getConversations(filter='unread', count=20)
         except Exception as e:
-            print(f"VK Fetch Error (getConversations): {e}")
+            print(f"[VK Fetch] Error getConversations: {e}")
             return
 
-        for item in conversations['items']:
+        items = conversations.get('items', [])
+        print(f"[VK Fetch] Got {len(items)} unread conversations")
+
+        for item in items:
             try:
                 last_msg = item['last_message']
                 sender_id = last_msg['from_id']
@@ -281,6 +284,7 @@ class VKFeedbackService:
                         message_type=TestimonialReply.MessageType.VK_MESSAGE,
                         vk_message_id=message_id,
                     )
+                    print(f"[VK Fetch] Added reply to existing dialog #{existing.id} from VK user {sender_id}")
                 else:
                     # Создаём новый диалог
                     ReviewService.create_review_from_vk(
@@ -290,6 +294,7 @@ class VKFeedbackService:
                         client_branch=client_branch,
                         vk_message_id=message_id
                     )
+                    print(f"[VK Fetch] Created new dialog for VK user {sender_id}")
 
                 # Помечаем как прочитанное после успешной обработки
                 try:

@@ -21,24 +21,29 @@ def sync_vk_messages_task():
     """Регулярная синхронизация сообщений ВК для всех тенантов"""
     from django_tenants.utils import get_tenant_model
     TenantModel = get_tenant_model()
-    
-    # Итерируемся по всем тенантам (кроме public)
-    for tenant in TenantModel.objects.exclude(schema_name='public'):
+
+    tenants = TenantModel.objects.exclude(schema_name='public')
+    print(f"[VK Sync] Found {tenants.count()} tenants")
+
+    for tenant in tenants:
         try:
             with schema_context(tenant.schema_name):
-                # Внутренняя логика работает уже в контексте схемы
-                for branch in Branch.objects.all():
+                branches = Branch.objects.all()
+                print(f"[VK Sync] [{tenant.schema_name}] {branches.count()} branches")
+
+                for branch in branches:
+                    print(f"[VK Sync] [{tenant.schema_name}] Processing branch: {branch}")
                     VKFeedbackService.fetch_unread_messages(branch)
-                
+
                 # Синхронизация статуса прочтения сообщений (open rate)
                 from apps.tenant.senler.services import VKService
                 vk_service = VKService()
                 if vk_service.is_configured:
                     updated = vk_service.sync_messages_read_status()
                     if updated:
-                        print(f"[{tenant.schema_name}] Updated {updated} message read statuses")
+                        print(f"[VK Sync] [{tenant.schema_name}] Updated {updated} message read statuses")
         except Exception as e:
-            print(f"Error syncing VK messages for schema {tenant.schema_name}: {e}")
+            print(f"[VK Sync] Error for schema {tenant.schema_name}: {e}")
 
 @shared_task
 def reclassify_waiting_reviews():
