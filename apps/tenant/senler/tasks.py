@@ -155,13 +155,13 @@ def send_single_message(client_branch_id, text, attachment=None, campaign_id=Non
 
 def _perform_send_single(client_branch_id, text, attachment, campaign_id, template_type=None):
     from apps.tenant.senler.models import MessageTemplate
+    from apps.tenant.branch.models import BranchTestimonials, TestimonialReply
 
     try:
         cb = ClientBranch.objects.get(id=client_branch_id)
 
         if cb.is_allowed_message:
             if template_type and not text:
-                # Берём текст ТОЛЬКО из БД. Если шаблон не найден или неактивен — не отправляем.
                 text = MessageTemplate.get_text(template_type, '')
 
             if not text:
@@ -171,6 +171,17 @@ def _perform_send_single(client_branch_id, text, attachment, campaign_id, templa
             service = VKService()
             if service.is_configured:
                 service.send_message(cb, text, attachment, campaign, template_type=template_type)
+
+                # Синхронизируем рассылку в диалог, если он существует
+                testimonial = BranchTestimonials.objects.filter(client=cb).first()
+                if testimonial:
+                    TestimonialReply.objects.create(
+                        testimonial=testimonial,
+                        text=text,
+                        direction=TestimonialReply.Direction.OUTGOING,
+                        message_type=TestimonialReply.MessageType.MAILING,
+                        is_sent_successfully=True,
+                    )
     except ClientBranch.DoesNotExist:
         pass
 

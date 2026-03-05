@@ -6,7 +6,7 @@ from django.db import connection # Added
 import vk_api
 import requests
 
-from apps.tenant.branch.models import Branch, ClientBranch, BranchTestimonials, TelegramBot, BotAdmin, CoinTransaction, Promotions
+from apps.tenant.branch.models import Branch, ClientBranch, BranchTestimonials, TestimonialReply, TelegramBot, BotAdmin, CoinTransaction, Promotions
 from apps.shared.guest.models import Client as BaseClient
 from apps.tenant.senler.models import VKConnection
 
@@ -245,21 +245,38 @@ class VKFeedbackService:
                 # 1. Проверяем, не обрабатывали ли мы уже это сообщение
                 if BranchTestimonials.objects.filter(vk_message_id=message_id).exists():
                     continue
+                if TestimonialReply.objects.filter(vk_message_id=message_id).exists():
+                    continue
 
                 # Пробуем найти клиента в базе по VK ID
                 client_branch = ClientBranch.objects.filter(
-                    client__vk_user_id=sender_id, 
+                    client__vk_user_id=sender_id,
                     branch=branch
                 ).first()
 
-                # Сохраняем как отзыв
-                ReviewService.create_review_from_vk(
-                    branch=branch,
-                    text=text,
-                    vk_user_id=sender_id,
-                    client_branch=client_branch,
-                    vk_message_id=message_id
-                )
+                # Проверяем, есть ли уже диалог с этим пользователем
+                existing = BranchTestimonials.objects.filter(
+                    vk_sender_id=str(sender_id)
+                ).first()
+
+                if existing:
+                    # Добавляем как входящее сообщение в существующий диалог
+                    TestimonialReply.objects.create(
+                        testimonial=existing,
+                        text=text,
+                        direction=TestimonialReply.Direction.INCOMING,
+                        message_type=TestimonialReply.MessageType.VK_MESSAGE,
+                        vk_message_id=message_id,
+                    )
+                else:
+                    # Создаём новый диалог
+                    ReviewService.create_review_from_vk(
+                        branch=branch,
+                        text=text,
+                        vk_user_id=sender_id,
+                        client_branch=client_branch,
+                        vk_message_id=message_id
+                    )
                 
                 # Помечаем как прочитанное (опционально, чтобы не скачивать вечно)
                 # vk.messages.markAsRead(peer_id=sender_id)
@@ -270,10 +287,25 @@ class VKFeedbackService:
 class ReviewService:
 	@staticmethod
 	def create_review(data: dict):
-		# ... (код создания testimonial остается) ...
 		vk_user_id = data['vk_user_id']
 		branch_id = data['branch_id']
 		client_branch = ClientService.get_client_profile(vk_user_id, branch_id)
+
+		# Проверяем, есть ли уже диалог с этим клиентом
+		existing = BranchTestimonials.objects.filter(client=client_branch).first()
+
+		if existing:
+			# Добавляем как входящее сообщение в существующий диалог
+			TestimonialReply.objects.create(
+				testimonial=existing,
+				text=data['review'],
+				direction=TestimonialReply.Direction.INCOMING,
+				message_type=TestimonialReply.MessageType.APP_REVIEW,
+			)
+			from apps.tenant.branch.tasks import process_ai_review
+			process_ai_review.delay(existing.id, connection.schema_name)
+			ReviewService._send_telegram_notification(existing, client_branch.branch)
+			return existing
 
 		testimonial = BranchTestimonials.objects.create(
 			client=client_branch,
@@ -284,7 +316,6 @@ class ReviewService:
 		)
 
 		from apps.tenant.branch.tasks import process_ai_review
-		# Passing schema_name explicitly
 		process_ai_review.delay(testimonial.id, connection.schema_name)
 
 		ReviewService._send_telegram_notification(testimonial, client_branch.branch)

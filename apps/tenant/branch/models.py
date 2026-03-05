@@ -336,7 +336,7 @@ class BranchTestimonials(TimeStampedModel):
         blank=True
     )
     vk_sender_id = models.CharField("VK ID отправителя", max_length=50, blank=True, null=True)
-    vk_message_id = models.CharField("VK ID сообщения", max_length=50, blank=True, null=True, unique=True)
+    vk_message_id = models.CharField("VK ID сообщения", max_length=50, blank=True, null=True)
     
     rating = models.PositiveIntegerField(null=True, blank=True, verbose_name='Оценка (только из приложения)',
                                          help_text='Оценка ставится только через приложение. Для обращений из ВК — пусто.')
@@ -368,16 +368,26 @@ class BranchTestimonials(TimeStampedModel):
 
 class TestimonialReply(TimeStampedModel):
     """
-    История ответов на отзывы/обращения.
-    Позволяет видеть все ответы как диалог.
+    Сообщение в диалоге отзыва/обращения.
+    Может быть входящим (от клиента) или исходящим (от админа/рассылки).
     """
+    class Direction(models.TextChoices):
+        INCOMING = 'incoming', 'Входящее'
+        OUTGOING = 'outgoing', 'Исходящее'
+
+    class MessageType(models.TextChoices):
+        VK_MESSAGE = 'vk_message', 'Сообщение ВК'
+        APP_REVIEW = 'app_review', 'Отзыв из приложения'
+        MAILING = 'mailing', 'Рассылка'
+        ADMIN_REPLY = 'admin_reply', 'Ответ администратора'
+
     testimonial = models.ForeignKey(
         BranchTestimonials,
         on_delete=models.CASCADE,
         related_name='replies',
         verbose_name='Отзыв'
     )
-    text = models.TextField(verbose_name='Текст ответа')
+    text = models.TextField(verbose_name='Текст сообщения')
     sent_at = models.DateTimeField(auto_now_add=True, verbose_name='Время отправки')
     sent_by = models.ForeignKey(
         'users.User',
@@ -385,16 +395,25 @@ class TestimonialReply(TimeStampedModel):
         null=True, blank=True,
         verbose_name='Отправил'
     )
+    direction = models.CharField(
+        max_length=10, choices=Direction.choices, default=Direction.OUTGOING,
+        verbose_name='Направление'
+    )
+    message_type = models.CharField(
+        max_length=15, choices=MessageType.choices, default=MessageType.ADMIN_REPLY,
+        verbose_name='Тип сообщения'
+    )
+    vk_message_id = models.CharField(max_length=50, blank=True, null=True, verbose_name='VK ID сообщения')
     is_sent_successfully = models.BooleanField(default=True, verbose_name='Успешно отправлено')
     error_message = models.TextField(blank=True, null=True, verbose_name='Ошибка')
 
     class Meta:
-        verbose_name = 'Ответ на отзыв'
-        verbose_name_plural = 'Ответы на отзывы'
+        verbose_name = 'Сообщение в диалоге'
+        verbose_name_plural = 'Сообщения в диалоге'
         ordering = ['sent_at']
 
     def __str__(self):
-        return f'Ответ на "{self.testimonial.review[:30]}..." от {self.sent_at:%d.%m.%Y %H:%M}'
+        return f'{self.get_direction_display()} — {self.text[:30]}...'
 
 
 class ClientBranchVisit(TimeStampedModel):
