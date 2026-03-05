@@ -193,6 +193,16 @@ class ClientBranch(TimeStampedModel):
         help_text='True = пользователь НЕ разрешал сообщения до приложения и разрешил через него'
     )
 
+    # FIX: Флаг успешности проверки VK API при первом входе.
+    # Если False — значит VK API не ответил при регистрации, и мы НЕ ЗНАЕМ
+    # был ли пользователь подписан заранее. В этом случае PATCH не будет
+    # ставить via_app=True без повторной проверки.
+    vk_status_checked = models.BooleanField(
+        default=False,
+        verbose_name='VK статус проверен',
+        help_text='True = при регистрации VK API успешно вернул данные о подписке/рассылке'
+    )
+
     invited_by = models.ForeignKey(
         'guest.Client', 
         on_delete=models.SET_NULL,

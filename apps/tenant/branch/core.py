@@ -97,11 +97,12 @@ class ClientService:
 			branch=branch
 		)
 		
-		# При ПЕРВОМ создании профиля — проверяем VK API:
-		# был ли пользователь УЖЕ подписан на группу и рассылку ДО нашего приложения.
-		# Если да — ставим is_joined_community/is_allowed_message = True сразу,
-		# чтобы при PATCH'е мы знали, что это НЕ новая подписка через приложение.
-		if cb_created:
+		# Проверяем VK API: был ли пользователь УЖЕ подписан на группу и рассылку
+		# ДО нашего приложения. Выполняем проверку:
+		# - При ПЕРВОМ создании профиля (cb_created=True)
+		# - ИЛИ если предыдущая проверка не удалась (vk_status_checked=False)
+		# Это защищает от ложных срабатываний via_app при сбоях VK API.
+		if not client_branch.vk_status_checked:
 			try:
 				from apps.tenant.senler.services import VKService
 				vk_service = VKService()
@@ -109,16 +110,23 @@ class ClientService:
 					was_member = vk_service.check_is_group_member(vk_user_id)
 					was_allowed = vk_service.check_is_messages_allowed(vk_user_id)
 					
-					if was_member:
-						client_branch.is_joined_community = True
-					if was_allowed:
-						client_branch.is_allowed_message = True
+					update_fields = ['vk_status_checked']
+					client_branch.vk_status_checked = True
 					
-					if was_member or was_allowed:
-						client_branch.save(update_fields=['is_joined_community', 'is_allowed_message'])
+					if was_member and not client_branch.is_joined_community:
+						client_branch.is_joined_community = True
+						update_fields.append('is_joined_community')
+					if was_allowed and not client_branch.is_allowed_message:
+						client_branch.is_allowed_message = True
+						update_fields.append('is_allowed_message')
+					
+					client_branch.save(update_fields=update_fields)
 			except Exception as e:
 				import logging
-				logging.getLogger(__name__).warning(f"VK check at registration failed for {vk_user_id}: {e}")
+				logging.getLogger(__name__).warning(
+					f"VK check at registration failed for {vk_user_id}: {e}. "
+					f"vk_status_checked remains False — via_app flags will NOT be set on PATCH."
+				)
 		
 		# Если передали ДР, сохраняем
 		if data.get('birth_date'):
@@ -153,18 +161,38 @@ class ClientService:
 		# ── Синхронизация связанных флагов ──
 		# Когда is_joined_community переходит False → True (подписался через приложение):
 		# автоматически ставим все связанные флаги, чтобы метрики считались правильно.
+		#
+		# FIX: Ставим via_app=True ТОЛЬКО если при регистрации VK API проверка прошла
+		# успешно (vk_status_checked=True). Если VK API упал при регистрации —
+		# мы не знаем, был ли пользователь подписан заранее, поэтому НЕ засчитываем
+		# как подписку через приложение. Лучше недосчитать, чем засчитать ложно.
 		new_joined = client_branch.is_joined_community
 		new_allowed = client_branch.is_allowed_message
 		new_story = client_branch.is_story_uploaded
 
 		if not old_joined and new_joined:
-			client_branch.joined_community_via_app = True
-			# Если вступил в сообщество — значит и рассылку разрешил
-			client_branch.is_allowed_message = True
-			client_branch.allowed_message_via_app = True
+			if client_branch.vk_status_checked:
+				client_branch.joined_community_via_app = True
+				# Если вступил в сообщество — значит и рассылку разрешил
+				client_branch.is_allowed_message = True
+				client_branch.allowed_message_via_app = True
+			else:
+				import logging
+				logging.getLogger(__name__).warning(
+					f"PATCH: is_joined_community False→True для {vk_user_id}, "
+					f"но vk_status_checked=False — via_app НЕ установлен. "
+					f"VK API не был проверен при регистрации."
+				)
 		
 		if not old_allowed and new_allowed:
-			client_branch.allowed_message_via_app = True
+			if client_branch.vk_status_checked:
+				client_branch.allowed_message_via_app = True
+			else:
+				import logging
+				logging.getLogger(__name__).warning(
+					f"PATCH: is_allowed_message False→True для {vk_user_id}, "
+					f"но vk_status_checked=False — via_app НЕ установлен."
+				)
 
 		# Когда is_story_uploaded переходит False → True — фиксируем время
 		if not old_story and new_story:
