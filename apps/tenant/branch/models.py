@@ -193,6 +193,19 @@ class ClientBranch(TimeStampedModel):
         help_text='True = пользователь НЕ разрешал сообщения до приложения и разрешил через него'
     )
 
+    # Дата/время, когда подписка/рассылка произошла ЧЕРЕЗ приложение.
+    # Используется в статистике для фильтрации "за период" вместо created_at.
+    joined_community_via_app_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Дата подписки на сообщество через приложение',
+        help_text='Заполняется автоматически при переходе is_joined_community False→True через PATCH'
+    )
+    allowed_message_via_app_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Дата разрешения рассылки через приложение',
+        help_text='Заполняется автоматически при переходе is_allowed_message False→True через PATCH'
+    )
+
     # FIX: Флаг успешности проверки VK API при первом входе.
     # Если False — значит VK API не ответил при регистрации, и мы НЕ ЗНАЕМ
     # был ли пользователь подписан заранее. В этом случае PATCH не будет

@@ -97,20 +97,24 @@ class ClientService:
 			branch=branch
 		)
 		
-		# Проверяем VK API: был ли пользователь УЖЕ подписан на группу и рассылку
-		# ДО нашего приложения. Выполняем проверку:
-		# - При ПЕРВОМ создании профиля (cb_created=True)
-		# - ИЛИ если предыдущая проверка не удалась (vk_status_checked=False)
+		# ══════════════════════════════════════════════════════════════════
+		# VK API ПРОВЕРКА: был ли пользователь УЖЕ подписан ДО приложения
+		# ══════════════════════════════════════════════════════════════════
 		#
-		# ВАЖНО: это ЕДИНСТВЕННЫЙ момент, когда мы можем отличить
+		# Выполняем при ПЕРВОМ входе (cb_created=True) ИЛИ если предыдущая
+		# проверка не удалась (vk_status_checked=False).
+		#
+		# ВАЖНО: это ЕДИНСТВЕННЫЙ момент, когда мы можем надёжно отличить
 		# "был подписан заранее" от "подпишется через приложение".
-		# К моменту PATCH пользователь уже подписан — различить невозможно.
 		#
 		# check_is_group_member / check_is_messages_allowed возвращают:
 		#   True  = подписан
-		#   False = НЕ подписан  
+		#   False = НЕ подписан (точно)
 		#   None  = ошибка VK API (таймаут, невалидный токен, etc.)
-		# vk_status_checked=True ставим ТОЛЬКО при True/False, не при None.
+		#
+		# vk_status_checked=True ставим ТОЛЬКО если обе проверки дали
+		# чёткий результат (True или False), НЕ при None.
+		# ══════════════════════════════════════════════════════════════════
 		if not client_branch.vk_status_checked:
 			import time
 			import logging
@@ -124,8 +128,6 @@ class ClientService:
 				was_allowed = None
 
 				# 3 попытки с паузой 0.5с.
-				# check_is_group_member возвращает None при ошибке —
-				# ретраим только те проверки, которые вернули None.
 				for attempt in range(3):
 					if was_member is None:
 						was_member = vk_service.check_is_group_member(vk_user_id)
@@ -146,11 +148,12 @@ class ClientService:
 				
 				# Ставим vk_status_checked=True ТОЛЬКО если обе проверки
 				# вернули чёткий результат (True или False).
-				# Если хоть одна вернула None — не ставим, попробуем при следующем входе.
 				if was_member is not None and was_allowed is not None:
 					update_fields = ['vk_status_checked']
 					client_branch.vk_status_checked = True
 					
+					# Если пользователь УЖЕ был подписан — ставим флаги,
+					# но НЕ ставим via_app (он подписался ДО приложения)
 					if was_member and not client_branch.is_joined_community:
 						client_branch.is_joined_community = True
 						update_fields.append('is_joined_community')
@@ -184,8 +187,24 @@ class ClientService:
 		Логика PATCH запроса.
 		Отслеживает переход is_joined_community и is_allowed_message
 		из False → True как реальную подписку через приложение.
+
+		═══ ЗАЩИТА от ложных срабатываний via_app ═══
+
+		Проблема: если VK API не ответил при регистрации (vk_status_checked=False),
+		мы не знаем, был ли юзер подписан заранее. Без проверки PATCH видит
+		False→True и ставит via_app=True — но это может быть ложное срабатывание.
+
+		Решение:
+		1. Если vk_status_checked=False — делаем повторную проверку VK API с ретраями
+		2. Если VK API говорит, что юзер УЖЕ подписан — подставляем old=True,
+		   чтобы перехода False→True не было → via_app НЕ ставится
+		3. Если VK API опять не отвечает — НЕ ставим via_app (лучше не засчитать)
 		"""
-		# Получаем объект (метод переиспользуем)
+		import logging
+		import time
+		_logger = logging.getLogger(__name__)
+
+		# Получаем объект
 		client_branch = ClientService.get_client_profile(vk_user_id, branch_id)
 
 		# Сохраняем старые значения ДО обновления
@@ -194,44 +213,111 @@ class ClientService:
 		old_story = client_branch.is_story_uploaded
 		old_invited_by = client_branch.invited_by_id
 
-		# Обновляем поля ClientBranch
+		# ══════════════════════════════════════════════════════════════════
+		# Если VK статус НЕ был проверен при регистрации — проверяем СЕЙЧАС
+		# ══════════════════════════════════════════════════════════════════
+		if not client_branch.vk_status_checked:
+			try:
+				from apps.tenant.senler.services import VKService
+				vk_service = VKService()
+
+				was_member = None
+				was_allowed = None
+
+				# 2 попытки с паузой 0.3с (не 3, чтобы PATCH не тормозил)
+				for attempt in range(2):
+					if was_member is None:
+						was_member = vk_service.check_is_group_member(vk_user_id)
+					if was_allowed is None:
+						was_allowed = vk_service.check_is_messages_allowed(vk_user_id)
+					
+					if was_member is not None and was_allowed is not None:
+						break
+					
+					if attempt < 1:
+						time.sleep(0.3)
+
+				if was_member is not None and was_allowed is not None:
+					# VK API ответил — обновляем состояние
+					client_branch.vk_status_checked = True
+
+					# Если юзер УЖЕ был подписан — обновляем is-флаги
+					# и подставляем old=True чтобы via_app НЕ сработал ниже
+					if was_member:
+						if not client_branch.is_joined_community:
+							client_branch.is_joined_community = True
+						old_joined = True  # Был подписан ДО → не засчитываем via_app
+
+					if was_allowed:
+						if not client_branch.is_allowed_message:
+							client_branch.is_allowed_message = True
+						old_allowed = True  # Разрешал ДО → не засчитываем via_app
+
+					_logger.info(
+						f"PATCH VK re-check OK for {vk_user_id}: member={was_member}, "
+						f"allowed={was_allowed}. vk_status_checked=True."
+					)
+				else:
+					# VK API не ответил — НЕ ставим via_app (защита)
+					_logger.warning(
+						f"PATCH VK re-check FAILED for {vk_user_id}: member={was_member}, "
+						f"allowed={was_allowed}. via_app will NOT be set."
+					)
+			except Exception as e:
+				_logger.warning(
+					f"PATCH VK re-check exception for {vk_user_id}: {e}. "
+					f"via_app will NOT be set."
+				)
+
+		# Обновляем поля ClientBranch из validated_data
 		for attr, value in validated_data.items():
-			# Пропускаем служебные поля, если они вдруг попали (хотя сериализатор их отсек)
 			if attr in ['vk_user_id', 'branch_id']:
 				continue
 			setattr(client_branch, attr, value)
 		
-		# ── Синхронизация связанных флагов ──
-		# Когда is_joined_community переходит False → True (подписался через приложение):
-		# автоматически ставим все связанные флаги, чтобы метрики считались правильно.
-		#
-		# Защита от ложных срабатываний — в register_or_update_client:
-		# при каждом входе (пока vk_status_checked=False) проверяем VK API с ретраями.
-		# Если пользователь УЖЕ был подписан — is_joined_community будет True ДО PATCH,
-		# и перехода False→True не произойдёт.
+		# ══════════════════════════════════════════════════════════════════
+		# Синхронизация via_app флагов
+		# ══════════════════════════════════════════════════════════════════
 		new_joined = client_branch.is_joined_community
 		new_allowed = client_branch.is_allowed_message
 		new_story = client_branch.is_story_uploaded
 
+		# Переход False→True для СООБЩЕСТВА
 		if not old_joined and new_joined:
-			client_branch.joined_community_via_app = True
-			# Если вступил в сообщество — значит и рассылку разрешил
-			client_branch.is_allowed_message = True
-			client_branch.allowed_message_via_app = True
-			if not client_branch.vk_status_checked:
-				import logging
-				logging.getLogger(__name__).warning(
-					f"PATCH: via_app=True для {vk_user_id}, но vk_status_checked=False. "
-					f"Возможно ложное срабатывание — VK проверка не прошла при регистрации."
+			if client_branch.vk_status_checked:
+				# VK проверка прошла — точно знаем, что подписался ЧЕРЕЗ приложение
+				client_branch.joined_community_via_app = True
+				client_branch.joined_community_via_app_at = timezone.now()
+				# Вступил в сообщество → автоматически разрешает рассылку.
+				# НО: via_app для рассылки ставим ТОЛЬКО если рассылка
+				# НЕ была разрешена до приложения (old_allowed=False).
+				client_branch.is_allowed_message = True
+				if not old_allowed:
+					client_branch.allowed_message_via_app = True
+					client_branch.allowed_message_via_app_at = timezone.now()
+				_logger.info(
+					f"PATCH: {vk_user_id} joined community via app (VK confirmed). "
+					f"allowed_message_via_app={'set' if not old_allowed else 'NOT set (was allowed before app)'}"
+				)
+			else:
+				# VK проверка НЕ прошла → НЕ ставим via_app
+				_logger.warning(
+					f"PATCH: {vk_user_id} is_joined_community False→True, "
+					f"но vk_status_checked=False — via_app НЕ установлен"
 				)
 		
+		# Переход False→True для РАССЫЛКИ (отдельно от сообщества)
 		if not old_allowed and new_allowed:
-			client_branch.allowed_message_via_app = True
-			if not client_branch.vk_status_checked:
-				import logging
-				logging.getLogger(__name__).warning(
-					f"PATCH: allowed_message_via_app=True для {vk_user_id}, "
-					f"но vk_status_checked=False. Возможно ложное срабатывание."
+			if client_branch.vk_status_checked:
+				if not client_branch.allowed_message_via_app:
+					# Ещё не был помечен через joined_community блок выше
+					client_branch.allowed_message_via_app = True
+					client_branch.allowed_message_via_app_at = timezone.now()
+					_logger.info(f"PATCH: {vk_user_id} allowed messages via app (VK confirmed)")
+			else:
+				_logger.warning(
+					f"PATCH: {vk_user_id} is_allowed_message False→True, "
+					f"но vk_status_checked=False — via_app НЕ установлен"
 				)
 
 		# Когда is_story_uploaded переходит False → True — фиксируем время

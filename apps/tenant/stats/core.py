@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 from django.db.models import Count, F, Q, Max, Min
-from django.db.models.functions import ExtractDay, ExtractMonth
+from django.db.models.functions import ExtractDay, ExtractMonth, Coalesce
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils.timezone import now
@@ -374,10 +374,30 @@ class GeneralStatsService:
         total_mailing_subscribers = total_mailing_qs.values("client").distinct().count()
 
         # Подписались в сообщество ВК ЗА ПЕРИОД — ИМЕННО через приложение
-        group_subscribers = period_qs.filter(joined_community_via_app=True).distinct().count()
+        # Фильтруем по joined_community_via_app_at (дата фактической подписки).
+        # Для старых записей (до миграции) _at=NULL — используем created_at как fallback.
+        group_sub_qs = base_qs.filter(joined_community_via_app=True).annotate(
+            effective_joined_at=Coalesce('joined_community_via_app_at', 'created_at')
+        )
+        if date_from:
+            group_sub_qs = group_sub_qs.filter(effective_joined_at__gte=date_from)
+        if date_to:
+            group_sub_qs = group_sub_qs.filter(effective_joined_at__lte=date_to)
+        if branch_id:
+            group_sub_qs = group_sub_qs.filter(branch_id=branch_id)
+        group_subscribers = group_sub_qs.values("client").distinct().count()
 
         # Подписались на рассылку ВК ЗА ПЕРИОД — ИМЕННО через приложение
-        mailing_subscribers_period = period_qs.filter(allowed_message_via_app=True).distinct().count()
+        mailing_sub_qs = base_qs.filter(allowed_message_via_app=True).annotate(
+            effective_allowed_at=Coalesce('allowed_message_via_app_at', 'created_at')
+        )
+        if date_from:
+            mailing_sub_qs = mailing_sub_qs.filter(effective_allowed_at__gte=date_from)
+        if date_to:
+            mailing_sub_qs = mailing_sub_qs.filter(effective_allowed_at__lte=date_to)
+        if branch_id:
+            mailing_sub_qs = mailing_sub_qs.filter(branch_id=branch_id)
+        mailing_subscribers_period = mailing_sub_qs.values("client").distinct().count()
 
         # ── Данные о гостях из POS систем (IIKO / Dooglys) ──
         # Загружаются асинхронно через AJAX (/analytics/api/v1/pos-stats/)
