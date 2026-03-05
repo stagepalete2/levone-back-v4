@@ -231,21 +231,34 @@ class VKFeedbackService:
         try:
             # Получаем непрочитанные диалоги
             conversations = vk.messages.getConversations(filter='unread', count=20)
-            
-            for item in conversations['items']:
+        except Exception as e:
+            print(f"VK Fetch Error (getConversations): {e}")
+            return
+
+        for item in conversations['items']:
+            try:
                 last_msg = item['last_message']
                 sender_id = last_msg['from_id']
                 text = last_msg['text']
                 message_id = str(last_msg['id'])
-                
+
                 # Игнорируем пустые сообщения или от ботов
                 if sender_id < 0 or not text:
                     continue
 
                 # 1. Проверяем, не обрабатывали ли мы уже это сообщение
                 if BranchTestimonials.objects.filter(vk_message_id=message_id).exists():
+                    # Помечаем как прочитанное чтобы не получать повторно
+                    try:
+                        vk.messages.markAsRead(peer_id=sender_id)
+                    except Exception:
+                        pass
                     continue
                 if TestimonialReply.objects.filter(vk_message_id=message_id).exists():
+                    try:
+                        vk.messages.markAsRead(peer_id=sender_id)
+                    except Exception:
+                        pass
                     continue
 
                 # Пробуем найти клиента в базе по VK ID
@@ -277,12 +290,15 @@ class VKFeedbackService:
                         client_branch=client_branch,
                         vk_message_id=message_id
                     )
-                
-                # Помечаем как прочитанное (опционально, чтобы не скачивать вечно)
-                # vk.messages.markAsRead(peer_id=sender_id)
 
-        except Exception as e:
-            print(f"VK Fetch Error: {e}")
+                # Помечаем как прочитанное после успешной обработки
+                try:
+                    vk.messages.markAsRead(peer_id=sender_id)
+                except Exception:
+                    pass
+
+            except Exception as e:
+                print(f"VK Fetch Error (message {item}): {e}")
 
 class ReviewService:
 	@staticmethod

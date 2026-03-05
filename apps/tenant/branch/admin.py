@@ -504,6 +504,8 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                 testimonial=obj,
                 text=reply_text,
                 sent_by=request.user if request.user.is_authenticated else None,
+                direction=TestimonialReply.Direction.OUTGOING,
+                message_type=TestimonialReply.MessageType.ADMIN_REPLY,
                 is_sent_successfully=is_sent,
                 error_message=error_msg,
             )
@@ -553,9 +555,11 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                             testimonial=review,
                             text=text,
                             sent_by=request.user if request.user.is_authenticated else None,
+                            direction=TestimonialReply.Direction.OUTGOING,
+                            message_type=TestimonialReply.MessageType.ADMIN_REPLY,
                             is_sent_successfully=is_sent,
                         )
-                        
+
                         if is_sent:
                             review.is_replied = True
                             review.save(update_fields=['is_replied'])
@@ -567,6 +571,8 @@ class BranchTestimonialsAdmin(BranchRestrictedAdminMixin, admin.ModelAdmin):
                             testimonial=review,
                             text=text,
                             sent_by=request.user if request.user.is_authenticated else None,
+                            direction=TestimonialReply.Direction.OUTGOING,
+                            message_type=TestimonialReply.MessageType.ADMIN_REPLY,
                             is_sent_successfully=False,
                             error_message=str(e),
                         )
