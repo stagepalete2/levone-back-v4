@@ -101,37 +101,53 @@ class ClientService:
 		# ДО нашего приложения. Выполняем проверку:
 		# - При ПЕРВОМ создании профиля (cb_created=True)
 		# - ИЛИ если предыдущая проверка не удалась (vk_status_checked=False)
-		# Это защищает от ложных срабатываний via_app при сбоях VK API.
 		#
 		# ВАЖНО: это ЕДИНСТВЕННЫЙ момент, когда мы можем отличить
 		# "был подписан заранее" от "подпишется через приложение".
 		# К моменту PATCH пользователь уже подписан — различить невозможно.
-		# Поэтому здесь используются ретраи для максимальной надёжности.
+		#
+		# check_is_group_member / check_is_messages_allowed возвращают:
+		#   True  = подписан
+		#   False = НЕ подписан  
+		#   None  = ошибка VK API (таймаут, невалидный токен, etc.)
+		# vk_status_checked=True ставим ТОЛЬКО при True/False, не при None.
 		if not client_branch.vk_status_checked:
+			import time
+			import logging
+			_logger = logging.getLogger(__name__)
+			
 			try:
-				import time
 				from apps.tenant.senler.services import VKService
 				vk_service = VKService()
-				if vk_service.is_configured:
-					was_member = None
-					was_allowed = None
+				
+				was_member = None
+				was_allowed = None
 
-					# Ретраи: 3 попытки с паузой 0.5с.
-					# VK API иногда отваливается по таймауту — одна повторная
-					# попытка решает ~95% случаев.
-					for attempt in range(3):
-						try:
-							if was_member is None:
-								was_member = vk_service.check_is_group_member(vk_user_id)
-							if was_allowed is None:
-								was_allowed = vk_service.check_is_messages_allowed(vk_user_id)
-							break  # Обе проверки прошли
-						except Exception:
-							if attempt < 2:
-								time.sleep(0.5)
-							else:
-								raise
-
+				# 3 попытки с паузой 0.5с.
+				# check_is_group_member возвращает None при ошибке —
+				# ретраим только те проверки, которые вернули None.
+				for attempt in range(3):
+					if was_member is None:
+						was_member = vk_service.check_is_group_member(vk_user_id)
+					if was_allowed is None:
+						was_allowed = vk_service.check_is_messages_allowed(vk_user_id)
+					
+					# Обе проверки дали чёткий результат (True или False, не None)
+					if was_member is not None and was_allowed is not None:
+						break
+					
+					if attempt < 2:
+						time.sleep(0.5)
+				
+				_logger.info(
+					f"VK check for {vk_user_id}: member={was_member}, allowed={was_allowed} "
+					f"(after {attempt + 1} attempt(s))"
+				)
+				
+				# Ставим vk_status_checked=True ТОЛЬКО если обе проверки
+				# вернули чёткий результат (True или False).
+				# Если хоть одна вернула None — не ставим, попробуем при следующем входе.
+				if was_member is not None and was_allowed is not None:
 					update_fields = ['vk_status_checked']
 					client_branch.vk_status_checked = True
 					
@@ -143,10 +159,15 @@ class ClientService:
 						update_fields.append('is_allowed_message')
 					
 					client_branch.save(update_fields=update_fields)
+				else:
+					_logger.warning(
+						f"VK check INCOMPLETE for {vk_user_id}: member={was_member}, allowed={was_allowed}. "
+						f"vk_status_checked remains False — will retry on next visit."
+					)
 			except Exception as e:
 				import logging
 				logging.getLogger(__name__).warning(
-					f"VK check at registration failed for {vk_user_id} after 3 attempts: {e}. "
+					f"VK check failed for {vk_user_id}: {e}. "
 					f"vk_status_checked remains False."
 				)
 		

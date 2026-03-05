@@ -294,13 +294,18 @@ class VKService:
             logger.error(f"Error getting group members count: {e}")
             return 0
 
-    def check_is_group_member(self, vk_user_id: int) -> bool:
+    def check_is_group_member(self, vk_user_id: int):
         """
         Проверяет, является ли пользователь участником группы ВК.
-        Возвращает True если уже подписан, False если нет.
+        
+        Returns:
+            True  — подписан
+            False — НЕ подписан (точно)
+            None  — проверка не удалась (VK API ошибка, сервис не настроен)
         """
         if not self.is_configured:
-            return False
+            logger.warning("check_is_group_member: VK service not configured")
+            return None
 
         try:
             group_id = self.config.group_id
@@ -308,19 +313,25 @@ class VKService:
                 group_id=group_id,
                 user_id=vk_user_id
             )
+            logger.debug(f"groups.isMember(group={group_id}, user={vk_user_id}) = {result}")
             # VK API возвращает 1 если участник, 0 если нет
             return bool(result)
         except Exception as e:
             logger.error(f"Error checking group membership for {vk_user_id}: {e}")
-            return False
+            return None
 
-    def check_is_messages_allowed(self, vk_user_id: int) -> bool:
+    def check_is_messages_allowed(self, vk_user_id: int):
         """
         Проверяет, разрешил ли пользователь сообщения от группы.
-        Возвращает True если уже разрешил, False если нет.
+        
+        Returns:
+            True  — разрешил
+            False — НЕ разрешил (точно)
+            None  — проверка не удалась (VK API ошибка, сервис не настроен)
         """
         if not self.is_configured:
-            return False
+            logger.warning("check_is_messages_allowed: VK service not configured")
+            return None
 
         try:
             group_id = self.config.group_id
@@ -328,10 +339,11 @@ class VKService:
                 group_id=group_id,
                 user_id=vk_user_id
             )
+            logger.debug(f"isMessagesFromGroupAllowed(group={group_id}, user={vk_user_id}) = {result}")
             return bool(result.get('is_allowed', 0))
         except Exception as e:
             logger.error(f"Error checking messages allowed for {vk_user_id}: {e}")
-            return False
+            return None
 
     def get_mailing_subscribers_count(self) -> int:
         """
