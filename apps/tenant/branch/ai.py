@@ -112,7 +112,7 @@ class AIService:
             
             testimonial.sentiment = result.get('sentiment', 'NEUTRAL')
             testimonial.ai_comment = result.get('reason', '')
-            testimonial.save()
+            testimonial.save(update_fields=['sentiment', 'ai_comment'])
             print(f"Success! Review classified as {testimonial.sentiment}")
             
             # --- Отправка ссылок на карты для позитивных отзывов ---
