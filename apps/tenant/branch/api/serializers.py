@@ -108,6 +108,13 @@ class ClientProfileResponseSerializer(serializers.ModelSerializer):
     # Вычисляемые поля (из вашей модели)
     coins_balance = serializers.IntegerField() 
 
+    # ── via_app флаги ──
+    # True = подписка произошла ИМЕННО через наше приложение.
+    # False = был подписан ДО приложения, либо ещё не подписался.
+    # Фронт использует эти поля для пометки "засчитано / не засчитано".
+    joined_community_via_app = serializers.BooleanField(read_only=True)
+    allowed_message_via_app = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = ClientBranch
         fields = [
@@ -119,8 +126,10 @@ class ClientProfileResponseSerializer(serializers.ModelSerializer):
             'birth_date',
             'coins_balance',
             'is_story_uploaded',
-            'is_joined_community',
-            'is_allowed_message',
+            'is_joined_community',      # реальный статус подписки (для кнопок)
+            'is_allowed_message',        # реальный статус рассылки (для кнопок)
+            'joined_community_via_app',  # засчитано через приложение (для пометки)
+            'allowed_message_via_app',   # засчитано через приложение (для пометки)
             'is_super_prize_won',
             'is_employee'
         ]
