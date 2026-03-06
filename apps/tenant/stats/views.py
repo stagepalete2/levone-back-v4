@@ -338,14 +338,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
         if branch_id:
             visit_filters &= Q(client__branch_id=branch_id)
 
-        # Только те, кто подписался на группу ИЛИ на рассылку ИЛИ сыграл в игру
-        played_ids = ClientAttempt.objects.values_list('client_id', flat=True).distinct()
-        visit_filters &= (
-            Q(client__joined_community_via_app=True) |
-            Q(client__allowed_message_via_app=True) |
-            Q(client_id__in=played_ids)
-        )
-
         scan_ids = ClientBranchVisit.objects.filter(visit_filters).values_list('client_id', flat=True)
         return ('Отсканировали QR-код за период', qs.filter(id__in=scan_ids))
 
