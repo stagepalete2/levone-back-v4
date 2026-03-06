@@ -4,6 +4,7 @@
 
 Период: СЕГОДНЯ
 Филиалы: ВСЕ (без фильтра по branch)
+Тенант: levone (schema_name='levone')
 
 Для каждой метрики:
   1) Выполняет тот же запрос, что и dashboard (core.py → get_dashboard_stats)
@@ -17,8 +18,18 @@ from datetime import timedelta
 from django.utils.timezone import now
 from django.db.models import Count, F, Q, Min, Max, Sum
 from django.db.models.functions import TruncDate, Coalesce
+from django.db import connection
 
-# ── Модели ──
+# ═══════════════════════════════════════════════════════════════════════
+# Переключаемся на schema тенанта levone
+# ═══════════════════════════════════════════════════════════════════════
+from apps.shared.clients.models import Company
+
+tenant = Company.objects.get(schema_name='levone')
+connection.set_tenant(tenant)
+print(f"\n  Подключено к тенанту: {tenant.name} (schema={tenant.schema_name})")
+
+# ── Модели (импорт ПОСЛЕ set_tenant) ──
 from apps.tenant.branch.models import Branch, ClientBranch, ClientBranchVisit, CoinTransaction, BranchTestimonials
 from apps.tenant.game.models import ClientAttempt
 from apps.tenant.inventory.models import SuperPrize
@@ -33,7 +44,7 @@ date_from = date_to.replace(hour=0, minute=0, second=0, microsecond=0)
 branch_id = None  # все точки
 
 print("=" * 100)
-print(f"  ДИАГНОСТИКА СТАТИСТИКИ")
+print(f"  ДИАГНОСТИКА СТАТИСТИКИ — тенант: {tenant.name} (schema={tenant.schema_name})")
 print(f"  Период: {date_from.strftime('%Y-%m-%d %H:%M:%S')} — {date_to.strftime('%Y-%m-%d %H:%M:%S')}")
 print(f"  Филиалы: ВСЕ")
 print("=" * 100)
