@@ -5,7 +5,6 @@ from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Count, F, Q
-from django.db.models.functions import Coalesce
 from datetime import timedelta
 import json
 import logging
@@ -13,6 +12,7 @@ import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 
 from apps.shared.config.sites import tenant_admin
@@ -184,10 +184,16 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             "new_clients_received_super_prize": lambda: self._get_new_prize_clients(qs, date_from, date_to, branch_id),
             "clients_returned_second_time": lambda: self._get_returned_clients(qs, date_from, date_to, branch_id),
             "clients_bought_prizes": lambda: self._get_bought_prizes_clients(qs, date_from, date_to, branch_id),
-            # group_subscribers — ЗА ПЕРИОД (фильтр по дате подписки via_app_at, как на дашборде)
-            "group_subscribers": lambda: self._get_group_subscribers(qs, date_from, date_to, branch_id),
-            # mailing_period — ЗА ПЕРИОД (фильтр по дате разрешения via_app_at, как на дашборде)
-            "mailing_period": lambda: self._get_mailing_subscribers_period(qs, date_from, date_to, branch_id),
+            # group_subscribers — ЗА ПЕРИОД (как на дашборде)
+            "group_subscribers": (
+                'Подписались в сообщество ВК ЧЕРЕЗ приложение',
+                period_qs.filter(joined_community_via_app=True)
+            ),
+            # mailing_period — ЗА ПЕРИОД (как на дашборде: mailing_subscribers_period)
+            "mailing_period": (
+                'Подписались на рассылку ВК ЧЕРЕЗ приложение',
+                period_qs.filter(allowed_message_via_app=True)
+            ),
             "sent_greetings": lambda: self._get_birthday_greeting_clients(qs, date_from, date_to, branch_id),
             "clients_birthday_qr": lambda: self._get_birthday_clients(qs, date_from, date_to, branch_id),
             "open_rate": lambda: self._get_read_message_clients(qs, date_from, date_to, branch_id),
@@ -373,42 +379,6 @@ class StatisticsDetailView(PeriodMixin, BranchMixin, BaseAdminStatsView, Templat
             log_filters &= Q(client__branch_id=branch_id)
         client_ids = MessageLog.objects.filter(log_filters).values_list('client_id', flat=True)
         return ('% открываемости сообщений в ВК', qs.filter(id__in=client_ids))
-
-    @staticmethod
-    def _get_group_subscribers(qs, date_from, date_to=None, branch_id=None):
-        """
-        Совпадает с dashboard: joined_community_via_app=True,
-        фильтр по joined_community_via_app_at (дата подписки через приложение),
-        fallback на created_at для старых записей.
-        """
-        group_sub_qs = qs.filter(joined_community_via_app=True).annotate(
-            effective_joined_at=Coalesce('joined_community_via_app_at', 'created_at')
-        )
-        if date_from:
-            group_sub_qs = group_sub_qs.filter(effective_joined_at__gte=date_from)
-        if date_to:
-            group_sub_qs = group_sub_qs.filter(effective_joined_at__lte=date_to)
-        if branch_id:
-            group_sub_qs = group_sub_qs.filter(branch_id=branch_id)
-        return ('Подписались в сообщество ВК ЧЕРЕЗ приложение', group_sub_qs)
-
-    @staticmethod
-    def _get_mailing_subscribers_period(qs, date_from, date_to=None, branch_id=None):
-        """
-        Совпадает с dashboard: allowed_message_via_app=True,
-        фильтр по allowed_message_via_app_at (дата разрешения через приложение),
-        fallback на created_at для старых записей.
-        """
-        mailing_sub_qs = qs.filter(allowed_message_via_app=True).annotate(
-            effective_allowed_at=Coalesce('allowed_message_via_app_at', 'created_at')
-        )
-        if date_from:
-            mailing_sub_qs = mailing_sub_qs.filter(effective_allowed_at__gte=date_from)
-        if date_to:
-            mailing_sub_qs = mailing_sub_qs.filter(effective_allowed_at__lte=date_to)
-        if branch_id:
-            mailing_sub_qs = mailing_sub_qs.filter(branch_id=branch_id)
-        return ('Подписались на рассылку ВК ЧЕРЕЗ приложение', mailing_sub_qs)
 
 
 class AwayView(LoginRequiredMixin, View):
@@ -614,6 +584,8 @@ class RFGuestMigrationAnalyticsDetailView(BaseAdminStatsView, DetailView):
 
 
 class RFRecalculateView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         serializer = RFRecalculateSerializer(data=request.data)
         if serializer.is_valid():
@@ -638,6 +610,8 @@ class RFRecalculateView(APIView):
 
 
 class RFSettingsSaveView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         serializer = RFSettingsUpdateSerializer(data=request.data)
         
@@ -666,6 +640,8 @@ class RFSettingsSaveView(APIView):
 
 
 class RFGetSegmentGuest(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, segment_code, *args, **kwargs):
         branch_id = request.query_params.get('branch')
         if not branch_id:
@@ -711,6 +687,8 @@ class RFGetSegmentGuest(APIView):
 
 
 class RFSegmentMailingView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         branch_id = request.data.get('branch')
         segment_code = request.data.get('segment_code')
@@ -776,6 +754,8 @@ class RFSegmentMailingView(APIView):
 
 
 class RFStatsResetView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         from apps.tenant.branch.models import Branch
         from apps.tenant.stats.models import (

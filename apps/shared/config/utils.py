@@ -1,4 +1,6 @@
-import random
+import secrets
+
 
 def generate_code():
-    return str(random.randint(10000, 99999))
+    """Генерирует 5-значный код. Использует secrets для криптографической стойкости."""
+    return str(secrets.randbelow(90000) + 10000)

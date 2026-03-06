@@ -1,6 +1,11 @@
+import hmac
+import hashlib
+import logging
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.conf import settings as django_settings
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from django.db.models import F
@@ -12,10 +17,45 @@ from apps.tenant.branch.models import ClientBranch, Branch
 from apps.tenant.delivery.models import Delivery
 from apps.tenant.delivery.api.serializers import DeliveryActivationSerializer, DeliveryWebhookRequestSerializer, DeliveryWebhookResponseSerializer
 
+logger = logging.getLogger(__name__)
+
+
+def verify_webhook_signature(request):
+    """
+    Проверяет HMAC подпись webhook-запроса.
+    Если WEBHOOK_SECRET не задан в .env — пропускает (обратная совместимость).
+    Если задан — проверяет заголовок X-Webhook-Signature.
+    """
+    secret = getattr(django_settings, 'WEBHOOK_SECRET', '')
+    if not secret:
+        # Секрет не настроен — пропускаем проверку (работает как раньше)
+        return True
+
+    signature = request.META.get('HTTP_X_WEBHOOK_SIGNATURE', '')
+    if not signature:
+        logger.warning("Webhook запрос без подписи (X-Webhook-Signature)")
+        return False
+
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        request.body,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected)
+
+
 class DeliveryWebhook(APIView):
     permission_classes = [AllowAny, ]
 
     def post(self, request):
+        # Проверка подписи webhook (если WEBHOOK_SECRET задан в .env)
+        if not verify_webhook_signature(request):
+            return Response(
+                {'error': 'invalid_signature', 'msg': 'Невалидная подпись webhook'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         serializer = DeliveryWebhookRequestSerializer(data=request.data)
 
         if not serializer.is_valid():

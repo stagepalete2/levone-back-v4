@@ -1,9 +1,12 @@
+import hmac
+import hashlib
 import logging
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
 from django.utils.timezone import now
 
@@ -16,6 +19,29 @@ from apps.shared.clients.api.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def verify_webhook_signature(request):
+    """
+    Проверяет HMAC подпись webhook-запроса.
+    Если WEBHOOK_SECRET не задан — пропускает (обратная совместимость).
+    """
+    secret = getattr(django_settings, 'WEBHOOK_SECRET', '')
+    if not secret:
+        return True
+
+    signature = request.META.get('HTTP_X_WEBHOOK_SIGNATURE', '')
+    if not signature:
+        logger.warning("Shared webhook запрос без подписи")
+        return False
+
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        request.body,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(signature, expected)
 
 
 class GetDomain(APIView):
@@ -67,6 +93,13 @@ class SharedDeliveryWebhookView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        # Проверка подписи webhook (если WEBHOOK_SECRET задан в .env)
+        if not verify_webhook_signature(request):
+            return Response(
+                {'error': 'invalid_signature', 'msg': 'Невалидная подпись webhook'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         serializer = SharedDeliveryWebhookRequestSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
