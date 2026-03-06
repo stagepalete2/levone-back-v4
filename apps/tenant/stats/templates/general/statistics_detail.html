@@ -287,8 +287,8 @@
                         <th>Клиент</th>
                         <th>Дата рождения</th>
                         <th class="text-center">Опубликовано историй</th>
-                        <th class="text-center">Подписан на сообщество</th>
-                        <th class="text-center">Подписан на рассылку</th>
+                        <th class="text-center">Вступил в сообщество через приложение</th>
+                        <th class="text-center">Разрешил рассылку через приложение</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -313,14 +313,14 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.is_joined_community %}
+                            {% if client.joined_community_via_app %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if client.is_allowed_message %}
+                            {% if client.allowed_message_via_app %}
                                 <span class="status-badge status-true">Да</span>
                             {% else %}
                                 <span class="status-badge status-false">Нет</span>
