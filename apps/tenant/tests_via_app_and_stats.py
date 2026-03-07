@@ -83,6 +83,8 @@ except ImportError:
 
 
 class TestUpdateProfileViaAppFlags(BASE_TEST_CLASS):
+    tenant_model_fields = {"client_id": 1, "name": "test"}
+
     """
     Проверяем ClientService.update_profile_details():
     правильно ли выставляются joined_community_via_app / allowed_message_via_app
@@ -423,6 +425,8 @@ class TestUpdateProfileViaAppFlags(BASE_TEST_CLASS):
 
 
 class TestStatsMetrics(BASE_TEST_CLASS):
+    tenant_model_fields = {"client_id": 2, "name": "test"}
+
     """
     Проверяем, что метрики group_subscribers и mailing_subscribers_period
     считаются строго по бизнес-логике:
@@ -660,6 +664,8 @@ class TestStatsMetrics(BASE_TEST_CLASS):
 
 
 class TestEndToEndPatchToStats(BASE_TEST_CLASS):
+    tenant_model_fields = {"client_id": 3, "name": "test"}
+
     """
     Полный цикл: создаём клиентов, делаем PATCH,
     затем проверяем метрики — всё через реальные вызовы сервисов.
@@ -762,6 +768,8 @@ class TestEndToEndPatchToStats(BASE_TEST_CLASS):
 
 
 class TestRegistrationVKCheck(BASE_TEST_CLASS):
+    tenant_model_fields = {"client_id": 4, "name": "test"}
+
     """
     Проверяем, что при POST /api/v1/client/ (register_or_update_client)
     VK API корректно проставляет is_joined_community / is_allowed_message
